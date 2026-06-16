@@ -16,4 +16,5 @@ dependencies = [
     "tqdm>=4.67.1",
     "scikit-learn>=1.8.0",
     "aind-data-access-api>=1.9.2",
+    "pyarrow>=24.0.0",
 ]
