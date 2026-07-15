@@ -127,7 +127,11 @@ def plot_choice_by_block_position(
 
 
 def plot_choice_by_block_position_per_session(
-    trials: pd.DataFrame, title_suffix: str = "", from_first_stop: bool = False, ax=None
+    trials: pd.DataFrame,
+    title_suffix: str = "",
+    from_first_stop: bool = False,
+    ax=None,
+    single_axis: bool = False,
 ):
     """Per animal, plot :func:`plot_choice_by_block_position` for each session.
 
@@ -140,6 +144,10 @@ def plot_choice_by_block_position_per_session(
     If ``ax`` is given, the per-session/per-subject split is dropped: all data is
     pooled into that single axes via :func:`plot_choice_by_block_position` and
     the axes is returned instead of a figure dict.
+
+    If ``single_axis`` is True, all sessions for each subject are drawn on a
+    single axes with vertical separators between them and session date labels at
+    the top, rather than one subplot per session.
     """
     import matplotlib.pyplot as plt
 
@@ -151,6 +159,91 @@ def plot_choice_by_block_position_per_session(
 
     trials = trials.copy()
     trials["subject_id"] = trials["session_id"].str.split("_").str[0]
+
+    if single_axis:
+        n_app = 5   # appearances per odor per block (0-4)
+        gap = 2     # x-units of blank space between sessions
+        stride = n_app + gap
+        colors = {True: "tab:orange", False: "tab:blue"}
+
+        figures = {}
+        for subject, sub in trials.groupby("subject_id"):
+            sessions = sorted(sub["session_id"].unique())
+            fig, single_ax = plt.subplots(figsize=(max(10, 1.8 * len(sessions)), 4))
+            seen = {True: False, False: False}
+
+            for s_idx, session_id in enumerate(sessions):
+                rs = _appearance_table(
+                    sub[sub["session_id"] == session_id],
+                    from_first_stop=from_first_stop,
+                )
+                x_offset = s_idx * stride
+
+                for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
+                    stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
+                    if stats.empty:
+                        continue
+                    color = colors[bool(is_rewarded)]
+                    lbl = (
+                        ("Rewarded odor" if is_rewarded else "Non-rewarded odor")
+                        if not seen[bool(is_rewarded)]
+                        else "_nolegend_"
+                    )
+                    single_ax.errorbar(
+                        stats.index + x_offset,
+                        stats["mean"],
+                        yerr=stats["sem"],
+                        marker="o",
+                        capsize=3,
+                        color=color,
+                        label=lbl,
+                    )
+                    seen[bool(is_rewarded)] = True
+
+                # vertical separator between sessions
+                if s_idx < len(sessions) - 1:
+                    single_ax.axvline(
+                        x=x_offset + n_app - 1 + gap / 2,
+                        color="gray",
+                        linestyle="--",
+                        lw=0.8,
+                        alpha=0.6,
+                    )
+
+                # session label at top of each session block
+                x_center = x_offset + (n_app - 1) / 2
+                single_ax.text(
+                    x_center,
+                    1.01,
+                    session_id.split("_", 1)[1],
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    transform=single_ax.get_xaxis_transform(),
+                )
+
+            all_ticks = [
+                s * stride + a for s in range(len(sessions)) for a in range(n_app)
+            ]
+            single_ax.set_xticks(all_ticks)
+            single_ax.set_xticklabels(
+                [str(a) for _ in range(len(sessions)) for a in range(n_app)],
+                fontsize=7,
+            )
+            single_ax.set_xlim(-0.5, len(sessions) * stride - gap - 0.5)
+            single_ax.set_ylim(0, 1.05)
+            single_ax.set_ylabel("P(has_choice)")
+            single_ax.set_xlabel(
+                "Appearance from first stop"
+                if from_first_stop
+                else "Appearance within block"
+            )
+            single_ax.legend()
+            fig.suptitle(f"Subject {subject}{title_suffix}")
+            fig.tight_layout()
+            figures[subject] = fig
+
+        return figures
 
     figures = {}
     for subject, sub in trials.groupby("subject_id"):
@@ -208,7 +301,9 @@ def label_first_stop(trials: pd.DataFrame) -> pd.DataFrame:
     return trials
 
 
-def plot_choice_by_block_position_by_first_stop(trials: pd.DataFrame, ax=None):
+def plot_choice_by_block_position_by_first_stop(
+    trials: pd.DataFrame, ax=None, single_axis: bool = False
+):
     """:func:`plot_choice_by_block_position_per_session`, split by first-stop outcome.
 
     Labels each block by whether its first stop was rewarded
@@ -220,6 +315,9 @@ def plot_choice_by_block_position_by_first_stop(trials: pd.DataFrame, ax=None):
     If ``ax`` is given, every split (subject, session, and condition) is dropped:
     all blocks that contain a stop are pooled and drawn (aligned to the first
     stop) into that single axes, which is returned.
+
+    ``single_axis`` is forwarded to :func:`plot_choice_by_block_position_per_session`
+    to draw all sessions on one axes per subject/condition with vertical separators.
     """
     trials = label_first_stop(trials)
 
@@ -235,7 +333,10 @@ def plot_choice_by_block_position_by_first_stop(trials: pd.DataFrame, ax=None):
     ]:
         subset = trials[trials["first_stop_rewarded"] == is_rewarded]
         for subject, fig in plot_choice_by_block_position_per_session(
-            subset, title_suffix=f" — {condition}", from_first_stop=True
+            subset,
+            title_suffix=f" — {condition}",
+            from_first_stop=True,
+            single_axis=single_axis,
         ).items():
             figures[(subject, condition)] = fig
 
