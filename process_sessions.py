@@ -4,6 +4,13 @@ concatenated Parquet files to ``data/processed/``.
 Each output file gets a ``session_id`` column so rows can always be traced back
 to their origin session.
 
+The per-modality tables are produced by the processor classes shipped in
+``aind_behavior_vr_foraging_packaging.processing`` (``TrialTableProcessor``,
+``PositionAndVelocityProcessor``, ``LicksProcessor``, ``SniffingProcessor``).
+Each processor exposes ``.compute()``, which returns a DataFrame indexed by
+harp time and stamps provenance (package / data-contract / dataset versions)
+into ``df.attrs``.
+
 Usage
 -----
 ::
@@ -13,11 +20,11 @@ Usage
 
 Tables written
 --------------
-data/processed/trials.parquet
-data/processed/position.parquet
-data/processed/licks.parquet
-data/processed/sniffing.parquet
-data/processed/sessions.parquet
+data/processed/trials.parquet     one row per site (from TrialTableProcessor)
+data/processed/position.parquet   time, position (cm), velocity (cm/s)
+data/processed/licks.parquet      time, is_lick_onset (True=onset, False=offset)
+data/processed/sniffing.parquet   time, voltage (V), sampling_rate_hz
+data/processed/sessions.parquet   one row per session with metadata + versions
 """
 
 from __future__ import annotations
@@ -26,30 +33,61 @@ import argparse
 import json
 import logging
 import re
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 _log = logging.getLogger(__name__)
 
-_VELOCITY_SMOOTH_WINDOW = 11
 
-# ---------------------------------------------------------------------------
-# Per-table extractors (mirror the PackagingProcessingAdapter logic)
-# ---------------------------------------------------------------------------
-
-
-def _build_trials(ds) -> tuple[pd.DataFrame, str]:
+def _packaging_version() -> str | None:
     try:
-        from aind_behavior_vr_foraging_packaging.processing._trial_table import (
-            TrialTableProcessor,
-        )
+        return _pkg_version("aind-behavior-vr-foraging-packaging")
+    except PackageNotFoundError:
+        return None
 
-        proc = TrialTableProcessor(ds, raise_on_error=False)
-        dataset_version = str(proc.dataset_version)
+
+# ---------------------------------------------------------------------------
+# Per-table extractors (thin wrappers over the packaging processor classes)
+# ---------------------------------------------------------------------------
+
+
+def _run_processor(processor_cls, ds, **kwargs) -> pd.DataFrame:
+    """Instantiate *processor_cls*, run ``.compute()`` and return a DataFrame
+    with the harp-time index promoted to a ``time`` column.
+
+    Any scalar provenance stamped into ``df.attrs`` by the processor (e.g.
+    ``sampling_rate_hz`` from :class:`SniffingProcessor`) is carried into a
+    column. Returns an empty frame on failure.
+    """
+    try:
+        df = processor_cls(ds, **kwargs).compute()
+    except Exception:
+        _log.warning("Failed to build %s table", processor_cls.__name__, exc_info=True)
+        return pd.DataFrame()
+
+    attrs = dict(df.attrs)
+    df = df.rename_axis("time").reset_index()
+    if "sampling_rate_hz" in attrs:
+        df["sampling_rate_hz"] = float(attrs["sampling_rate_hz"])
+    return df
+
+
+def _build_trials(processor_cls, ds) -> tuple[pd.DataFrame, dict]:
+    """Return the per-site trial table and a provenance dict for the session."""
+    provenance: dict = {
+        "dataset_version": None,
+        "data_contract_version": None,
+        "packaging_version": _packaging_version(),
+    }
+    try:
+        proc = processor_cls(ds, raise_on_error=False)
+        provenance["dataset_version"] = str(proc.dataset_version)
+        provenance["data_contract_version"] = str(proc.parser_version)
         if proc.dataset_version != proc.parser_version:
             _log.warning(
                 "Dataset version %s != parser version %s; values may be coerced",
@@ -59,67 +97,19 @@ def _build_trials(ds) -> tuple[pd.DataFrame, str]:
         sites = proc.process_to_sites()
         if not sites:
             _log.warning("TrialTableProcessor returned no sites")
-            return pd.DataFrame(), dataset_version
-        return pd.DataFrame([s.model_dump() for s in sites]), dataset_version
+            return pd.DataFrame(), provenance
+        return pd.DataFrame([s.model_dump() for s in sites]), provenance
     except Exception:
         _log.warning("Failed to build trials table", exc_info=True)
-        return pd.DataFrame(), "unknown"
+        return pd.DataFrame(), provenance
 
 
-def _build_position(ds) -> pd.DataFrame:
-    try:
-        raw = ds.at("Behavior").at("OperationControl").at("CurrentPosition").load().data
-        series = raw["Position"].sort_index()
-        series = series[~series.index.duplicated(keep="first")]
-        if len(series) < 2:
-            return pd.DataFrame(columns=["time", "position", "velocity"])
-        t = series.index.to_numpy(dtype=float)
-        p = series.to_numpy(dtype=float)
-        raw_vel = np.gradient(p, t)
-        smoothed = (
-            pd.Series(raw_vel, index=series.index)
-            .rolling(_VELOCITY_SMOOTH_WINDOW, center=True, min_periods=1)
-            .mean()
-            .to_numpy(dtype=float)
-        )
-        return pd.DataFrame({"time": t, "position": p, "velocity": smoothed})
-    except Exception:
-        _log.warning("Failed to build position table", exc_info=True)
-        return pd.DataFrame()
-
-
-def _build_licks(ds) -> pd.DataFrame:
-    try:
-        raw = ds.at("Behavior").at("HarpLickometer").at("LickState").load().data
-        channel = raw["Channel0"].astype(bool).sort_index()
-        onsets = channel[channel & ~channel.shift(1, fill_value=False)]
-        return pd.DataFrame({"time": onsets.index.to_numpy(dtype=float), "channel": 0})
-    except Exception:
-        _log.warning("Failed to build licks table", exc_info=True)
-        return pd.DataFrame()
-
-
-def _build_sniffing(ds) -> pd.DataFrame:
-    try:
-        from aind_behavior_vr_foraging_packaging.processing._sniffing import (
-            SniffingProcessor,
-        )
-
-        proc = SniffingProcessor(ds)
-        sniff_signal, sampling_rate = proc.compute_sniff_signal(ds)
-        return pd.DataFrame(
-            {
-                "time": sniff_signal.index.to_numpy(dtype=float),
-                "sniff_signal": sniff_signal.to_numpy(dtype=float),
-                "sampling_rate_hz": float(sampling_rate),
-            }
-        )
-    except Exception:
-        _log.warning("Failed to build sniffing table", exc_info=True)
-        return pd.DataFrame()
-
-
-def _build_sessions(local_dir: Path, session_id: str, n_trials: int) -> pd.DataFrame:
+def _build_sessions(
+    local_dir: Path,
+    session_id: str,
+    n_trials: int,
+    provenance: dict,
+) -> pd.DataFrame:
     row: dict = {
         "session_id": session_id,
         "experimenter": None,
@@ -128,6 +118,9 @@ def _build_sessions(local_dir: Path, session_id: str, n_trials: int) -> pd.DataF
         "session_name": None,
         "notes": None,
         "n_trials": n_trials,
+        "dataset_version": provenance.get("dataset_version"),
+        "data_contract_version": provenance.get("data_contract_version"),
+        "packaging_version": provenance.get("packaging_version"),
     }
 
     logs_dir = _find_logs_dir(local_dir)
@@ -203,6 +196,12 @@ _TABLE_NAMES = ("trials", "position", "licks", "sniffing", "sessions")
 
 def process_all(data_root: Path, force: bool = False) -> None:
     from aind_behavior_vr_foraging.data_contract import dataset as load_dataset
+    from aind_behavior_vr_foraging_packaging.processing import (
+        LicksProcessor,
+        PositionAndVelocityProcessor,
+        SniffingProcessor,
+        TrialTableProcessor,
+    )
 
     processed_dir = data_root / "processed"
     processed_dir.mkdir(exist_ok=True)
@@ -236,11 +235,13 @@ def process_all(data_root: Path, force: bool = False) -> None:
             _log.warning("Failed to load dataset for %s", session_id, exc_info=True)
             continue
 
-        trials_df, _ = _build_trials(ds)
-        pos_df = _build_position(ds)
-        licks_df = _build_licks(ds)
-        sniff_df = _build_sniffing(ds)
-        sessions_df = _build_sessions(session_dir, session_id, n_trials=len(trials_df))
+        trials_df, provenance = _build_trials(TrialTableProcessor, ds)
+        pos_df = _run_processor(PositionAndVelocityProcessor, ds)
+        licks_df = _run_processor(LicksProcessor, ds)
+        sniff_df = _run_processor(SniffingProcessor, ds)
+        sessions_df = _build_sessions(
+            session_dir, session_id, n_trials=len(trials_df), provenance=provenance
+        )
 
         for df, name in (
             (trials_df, "trials"),

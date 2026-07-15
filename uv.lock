@@ -60,8 +60,8 @@ data = [
 
 [[package]]
 name = "aind-behavior-vr-foraging-packaging"
-version = "0.0.0rc1"
-source = { git = "https://github.com/AllenNeuralDynamics/Aind.Behavior.VrForaging.Packaging?rev=746f93e#746f93e4f0c02d353b94bea7b75ea04d792395f4" }
+version = "0.0.1"
+source = { git = "https://github.com/AllenNeuralDynamics/Aind.Behavior.VrForaging.Packaging?rev=b028ffe#b028ffe6a028b40dae69e3dd38f19c72f882ce8a" }
 dependencies = [
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
     { name = "aind-data-access-api" },
@@ -159,7 +159,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aind-behavior-vr-foraging", extras = ["data"], specifier = ">=1.1" },
-    { name = "aind-behavior-vr-foraging-packaging", git = "https://github.com/AllenNeuralDynamics/Aind.Behavior.VrForaging.Packaging?rev=746f93e" },
+    { name = "aind-behavior-vr-foraging-packaging", git = "https://github.com/AllenNeuralDynamics/Aind.Behavior.VrForaging.Packaging?rev=b028ffe" },
     { name = "aind-data-access-api", specifier = ">=1.9.2" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "matplotlib", specifier = ">=3.10.7" },
