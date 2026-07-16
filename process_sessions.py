@@ -4,12 +4,14 @@ concatenated Parquet files to ``data/processed/``.
 Each output file gets a ``session_id`` column so rows can always be traced back
 to their origin session.
 
-The per-modality tables are produced by the processor classes shipped in
-``aind_behavior_vr_foraging_packaging.processing`` (``TrialTableProcessor``,
-``PositionAndVelocityProcessor``, ``LicksProcessor``, ``SniffingProcessor``).
-Each processor exposes ``.compute()``, which returns a DataFrame indexed by
-harp time and stamps provenance (package / data-contract / dataset versions)
-into ``df.attrs``.
+Trials and position/velocity are built via the version-dispatching factory
+functions in ``aind_behavior_vr_foraging_packaging.pipeline``
+(``get_trial_table_processor`` / ``get_position_velocity_processor``), which
+select the legacy or current processor variant based on each session's
+dataset version. Licks has no legacy variant, so its processor is used
+directly. Each processor's ``.compute()`` returns a DataFrame indexed by harp
+time (except ``trials``, which is one row per site) and stamps provenance
+(package / data-contract / dataset versions) into ``df.attrs``.
 
 Usage
 -----
@@ -20,11 +22,16 @@ Usage
 
 Tables written
 --------------
-data/processed/trials.parquet     one row per site (from TrialTableProcessor)
-data/processed/position.parquet   time, position (cm), velocity (cm/s)
-data/processed/licks.parquet      time, is_lick_onset (True=onset, False=offset)
-data/processed/sniffing.parquet   time, voltage (V), sampling_rate_hz
-data/processed/sessions.parquet   one row per session with metadata + versions
+data/processed/trials.parquet            one row per site
+data/processed/position_velocity.parquet indexed by harp time; position (cm), velocity (cm/s)
+data/processed/licks.parquet              indexed by harp time; is_lick_onset (True=onset, False=offset)
+data/processed/sessions.parquet          one row per session with metadata + versions
+
+Following the upstream package's own convention (see
+``scripts/example_parquet_pipeline.py``), the harp-time index on
+position_velocity/licks is written as-is via ``to_parquet()`` (``index=True``)
+rather than flattened into a plain column; trials/sessions have no meaningful
+index, so they're written with ``index=False``.
 """
 
 from __future__ import annotations
@@ -52,56 +59,8 @@ def _packaging_version() -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Per-table extractors (thin wrappers over the packaging processor classes)
+# Per-table extractors
 # ---------------------------------------------------------------------------
-
-
-def _run_processor(processor_cls, ds, **kwargs) -> pd.DataFrame:
-    """Instantiate *processor_cls*, run ``.compute()`` and return a DataFrame
-    with the harp-time index promoted to a ``time`` column.
-
-    Any scalar provenance stamped into ``df.attrs`` by the processor (e.g.
-    ``sampling_rate_hz`` from :class:`SniffingProcessor`) is carried into a
-    column. Returns an empty frame on failure.
-    """
-    try:
-        df = processor_cls(ds, **kwargs).compute()
-    except Exception:
-        _log.warning("Failed to build %s table", processor_cls.__name__, exc_info=True)
-        return pd.DataFrame()
-
-    attrs = dict(df.attrs)
-    df = df.rename_axis("time").reset_index()
-    if "sampling_rate_hz" in attrs:
-        df["sampling_rate_hz"] = float(attrs["sampling_rate_hz"])
-    return df
-
-
-def _build_trials(processor_cls, ds) -> tuple[pd.DataFrame, dict]:
-    """Return the per-site trial table and a provenance dict for the session."""
-    provenance: dict = {
-        "dataset_version": None,
-        "data_contract_version": None,
-        "packaging_version": _packaging_version(),
-    }
-    try:
-        proc = processor_cls(ds, raise_on_error=False)
-        provenance["dataset_version"] = str(proc.dataset_version)
-        provenance["data_contract_version"] = str(proc.parser_version)
-        if proc.dataset_version != proc.parser_version:
-            _log.warning(
-                "Dataset version %s != parser version %s; values may be coerced",
-                proc.dataset_version,
-                proc.parser_version,
-            )
-        sites = proc.process_to_sites()
-        if not sites:
-            _log.warning("TrialTableProcessor returned no sites")
-            return pd.DataFrame(), provenance
-        return pd.DataFrame([s.model_dump() for s in sites]), provenance
-    except Exception:
-        _log.warning("Failed to build trials table", exc_info=True)
-        return pd.DataFrame(), provenance
 
 
 def _build_sessions(
@@ -120,7 +79,7 @@ def _build_sessions(
         "n_trials": n_trials,
         "dataset_version": provenance.get("dataset_version"),
         "data_contract_version": provenance.get("data_contract_version"),
-        "packaging_version": provenance.get("packaging_version"),
+        "packaging_version": provenance.get("packaging_version") or _packaging_version(),
     }
 
     logs_dir = _find_logs_dir(local_dir)
@@ -191,17 +150,19 @@ def _session_dirs(data_root: Path) -> list[Path]:
 # Main processing loop
 # ---------------------------------------------------------------------------
 
-_TABLE_NAMES = ("trials", "position", "licks", "sniffing", "sessions")
+_TABLE_NAMES = ("trials", "position_velocity", "licks", "sessions")
+#: Tables indexed by harp time; written with their pandas index intact
+#: (``to_parquet()`` default), matching the upstream package's own convention.
+_INDEXED_TABLES = frozenset({"position_velocity", "licks"})
 
 
 def process_all(data_root: Path, force: bool = False) -> None:
     from aind_behavior_vr_foraging.data_contract import dataset as load_dataset
-    from aind_behavior_vr_foraging_packaging.processing import (
-        LicksProcessor,
-        PositionAndVelocityProcessor,
-        SniffingProcessor,
-        TrialTableProcessor,
+    from aind_behavior_vr_foraging_packaging.pipeline import (
+        get_position_velocity_processor,
+        get_trial_table_processor,
     )
+    from aind_behavior_vr_foraging_packaging.processing import LicksProcessor
 
     processed_dir = data_root / "processed"
     processed_dir.mkdir(exist_ok=True)
@@ -230,25 +191,28 @@ def process_all(data_root: Path, force: bool = False) -> None:
         _log.info("Processing %s", session_id)
 
         try:
-            ds = load_dataset(str(session_dir))
+            ds = load_dataset(session_dir)
         except Exception:
             _log.warning("Failed to load dataset for %s", session_id, exc_info=True)
             continue
 
-        trials_df, provenance = _build_trials(TrialTableProcessor, ds)
-        pos_df = _run_processor(PositionAndVelocityProcessor, ds)
-        licks_df = _run_processor(LicksProcessor, ds)
-        sniff_df = _run_processor(SniffingProcessor, ds)
+        try:
+            trials_df = get_trial_table_processor(ds, raise_on_error=False).compute()
+            pos_df = get_position_velocity_processor(ds, raise_on_error=False).compute()
+            licks_df = LicksProcessor(ds, raise_on_error=False).compute()
+        except Exception:
+            _log.warning("Failed to process %s — skipping session", session_id, exc_info=True)
+            continue
+
         sessions_df = _build_sessions(
-            session_dir, session_id, n_trials=len(trials_df), provenance=provenance
+            session_dir, session_id, n_trials=len(trials_df), provenance=trials_df.attrs
         )
 
-        for df, name in (
-            (trials_df, "trials"),
-            (pos_df, "position"),
-            (licks_df, "licks"),
-            (sniff_df, "sniffing"),
-            (sessions_df, "sessions"),
+        for name, df in (
+            ("trials", trials_df),
+            ("position_velocity", pos_df),
+            ("licks", licks_df),
+            ("sessions", sessions_df),
         ):
             if df.empty:
                 continue
@@ -264,9 +228,15 @@ def process_all(data_root: Path, force: bool = False) -> None:
         if not parts:
             _log.warning("No data collected for table '%s' — skipping", name)
             continue
-        combined = pd.concat(parts, ignore_index=True)
         out_path = processed_dir / f"{name}.parquet"
-        combined.to_parquet(out_path, index=False)
+        if name in _INDEXED_TABLES:
+            # Preserve each session's harp-time index rather than flattening it
+            # into a column (mirrors the upstream package's own to_parquet() usage).
+            combined = pd.concat(parts)
+            combined.to_parquet(out_path)
+        else:
+            combined = pd.concat(parts, ignore_index=True)
+            combined.to_parquet(out_path, index=False)
         _log.info("Wrote %s rows → %s", len(combined), out_path)
 
     _log.info("Done. Output in %s", processed_dir)
