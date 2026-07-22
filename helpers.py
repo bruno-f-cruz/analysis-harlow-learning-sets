@@ -24,20 +24,23 @@ def assign_blocks(trials: pd.DataFrame, block_size: int = 10) -> pd.DataFrame:
 
 
 def trim_sessions(
-    trials: pd.DataFrame, start_frac: float = 0.05, end_frac: float = 0.20
+    trials: pd.DataFrame, start_frac: float = 0.0, end_frac: float = 1.0
 ) -> pd.DataFrame:
-    """Drop the first ``start_frac`` and last ``end_frac`` of each session's rows.
+    """Keep the ``[start_frac, end_frac]`` window of each session's rows.
 
-    Within each session, rows are ordered chronologically (by ``start_time``) and
-    the leading ``start_frac`` and trailing ``end_frac`` fractions of rows are
-    removed, keeping the middle portion. Returns a new trimmed DataFrame.
+    Within each session, rows are ordered chronologically (by ``start_time``)
+    and only the fractional window from ``start_frac`` to ``end_frac`` is kept.
+    Both are fractions of the session measured from its start, so e.g.
+    ``start_frac=0.0, end_frac=0.7`` keeps the first 70% and
+    ``start_frac=0.1, end_frac=0.9`` keeps the middle 80%. The default keeps the
+    whole session. Returns a new trimmed DataFrame.
     """
     kept = []
     for _, grp in trials.groupby("session_id", sort=False):
         g = grp.sort_values("start_time")
         n = len(g)
         lo = int(round(n * start_frac))
-        hi = n - int(round(n * end_frac))
+        hi = int(round(n * end_frac))
         kept.append(g.iloc[lo:hi])
     return pd.concat(kept) if kept else trials.iloc[:0]
 
