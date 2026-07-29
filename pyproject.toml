@@ -17,4 +17,13 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "aind-data-access-api>=1.9.2",
     "pyarrow>=24.0.0",
+    "marimo[sql]>=0.23.15",
+    "duckdb>=1.5.5",
 ]
+
+[tool.marimo.runtime]
+# Re-run cells that depend on helpers.py / viz_helpers.py when those files change,
+# instead of silently reusing the already-imported module. This is marimo's
+# equivalent of IPython's %autoreload, but it re-executes the affected cells
+# rather than hot-patching function bodies, so new module-level names work too.
+auto_reload = "autorun"

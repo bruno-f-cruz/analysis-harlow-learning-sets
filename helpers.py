@@ -1,6 +1,80 @@
 import numpy as np
 import pandas as pd
 
+# ─── Subject corrections ──────────────────────────────────────────────────────
+#
+# A session_id here is the data asset name, which happens to start with a subject
+# id. For a few sessions that prefix is wrong -- the session was acquired under
+# the wrong subject in the rig metadata. Upstream deliberately does NOT rename the
+# assets (the name is only a unique key and is not meant to be parsed), so the
+# correction has to be applied at load time on our side.
+#
+# https://github.com/AllenNeuralDynamics/aind-scientific-computing/issues/855
+
+#: ``{session_id: correct_subject_id}``. Keep the session_id keys exactly as they
+#: appear in the parquet; entries that match nothing are harmless, so a fix can be
+#: recorded here before the corresponding session has been synced locally.
+SESSION_SUBJECT_OVERRIDES = {
+    # issue #855, first report: metadata subject was 841312
+    "841312_2026-07-07_20-38-00": "866063",
+    # issue #855, follow-up comment: metadata subject was 841299
+    "841299_2026-07-29_17-02-58": "864846",
+}
+
+
+def subject_id_for(session_ids):
+    """Correct subject id(s) for ``session_ids``, applying the #855 overrides.
+
+    Accepts a single session_id or any Series/sequence of them, and returns the
+    same shape (a ``str`` for scalar input, a ``Series`` of ``str`` otherwise).
+    Never parse the subject out of a session_id directly -- use this, or the
+    ``subject_id`` column that :func:`add_subject_id` writes.
+    """
+    if isinstance(session_ids, str):
+        return SESSION_SUBJECT_OVERRIDES.get(session_ids, session_ids.split("_")[0])
+    s = pd.Series(session_ids, dtype="object").astype(str)
+    return s.str.split("_").str[0].mask(
+        s.isin(SESSION_SUBJECT_OVERRIDES), s.map(SESSION_SUBJECT_OVERRIDES)
+    )
+
+
+def add_subject_id(df: pd.DataFrame, session_col: str = "session_id") -> pd.DataFrame:
+    """Return ``df`` with a corrected ``subject_id`` column (overwrites if present).
+
+    This is the *only* place the correction is applied: call it once, right after
+    loading the trials, and every frame derived from that one carries the column.
+    The helpers below just group by ``subject_id`` and never re-derive it, so a
+    frame that skipped this step raises ``KeyError`` there rather than quietly
+    grouping by the wrong name prefix.
+    """
+    out = df.copy()
+    out["subject_id"] = subject_id_for(out[session_col]).to_numpy()
+    return out
+
+
+def report_subject_overrides(df: pd.DataFrame) -> pd.DataFrame:
+    """Which :data:`SESSION_SUBJECT_OVERRIDES` actually applied to ``df``.
+
+    Returns one row per override with ``session_id``, ``name_prefix`` (the wrong
+    subject still in the asset name), ``corrected_to`` and ``n_rows`` (0 when that
+    session is not present locally). Print it after loading so a correction that
+    silently stops matching -- e.g. because an asset was renamed after all -- is
+    visible rather than assumed.
+    """
+    present = set(df["session_id"].unique())
+    return pd.DataFrame(
+        [
+            {
+                "session_id": sid,
+                "name_prefix": sid.split("_")[0],
+                "corrected_to": subject,
+                "n_rows": int((df["session_id"] == sid).sum()),
+                "present": sid in present,
+            }
+            for sid, subject in SESSION_SUBJECT_OVERRIDES.items()
+        ]
+    )
+
 
 def assign_blocks(trials: pd.DataFrame, block_size: int = 10) -> pd.DataFrame:
     """Add a ``block`` column grouping consecutive RewardSite trials into blocks.
@@ -161,7 +235,6 @@ def plot_choice_by_block_position_per_session(
         return ax
 
     trials = trials.copy()
-    trials["subject_id"] = trials["session_id"].str.split("_").str[0]
 
     if single_axis:
         n_app = 5   # appearances per odor per block (0-4)
@@ -365,7 +438,6 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
 
     trials = label_first_stop(trials)
     trials = trials.copy()
-    trials["subject_id"] = trials["session_id"].str.split("_").str[0]
 
     # one panel per odor, with its own gradient base colourmap
     # (matching the tab:orange / tab:blue of cell 6)
@@ -416,252 +488,6 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
                 cb.set_ticks([])
 
             axes[0].set_ylabel("P(has_choice)")
-            fig.suptitle(f"Subject {subject} — {condition}")
-            fig.tight_layout()
-            figures[(subject, condition)] = fig
-
-    return figures
-
-
-def plot_odor_preference_ranking(trials: pd.DataFrame):
-    """Rank odors by P(stop) using only paired within-block data.
-
-    For each block, P(stop) is computed separately for the rewarded odor and
-    the non-rewarded odor.  Those block-level estimates are then averaged per
-    odor index and role.  Odors are ranked along the x-axis by their mean
-    P(stop) when *non-rewarded* — the role where reward cannot explain the
-    stopping — as this best reflects intrinsic odor attractiveness.
-
-    Two bars per odor: orange = rewarded role, blue = non-rewarded role.
-    Error bars are SEM across blocks.  One figure per subject.
-    """
-    import matplotlib.pyplot as plt
-
-    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()].copy()
-    rs["subject_id"] = rs["session_id"].str.split("_").str[0]
-    rs["odor_index"] = rs["patch_label"].str.split("_").str[0].astype(int)
-    rs["is_non_rewarded"] = rs["patch_label"].str.contains("NonRewarded")
-
-    figures = {}
-    for subject, sub in rs.groupby("subject_id"):
-        # per-block, per-odor P(stop) — keeps data paired within blocks
-        block_stats = (
-            sub.groupby(["session_id", "block", "odor_index", "is_non_rewarded"])[
-                "has_choice"
-            ]
-            .mean()
-            .reset_index(name="p_stop")
-        )
-
-        summary = (
-            block_stats.groupby(["odor_index", "is_non_rewarded"])["p_stop"]
-            .agg(mean="mean", sem=lambda x: x.sem())
-            .reset_index()
-        )
-
-        # rank by mean P(stop) in the non-rewarded role (intrinsic attractiveness)
-        nr_means = summary[summary["is_non_rewarded"]].set_index("odor_index")["mean"]
-        odor_order = nr_means.sort_values(ascending=False).index.tolist()
-
-        x = np.arange(len(odor_order))
-        width = 0.35
-
-        fig, ax = plt.subplots(figsize=(max(6, len(odor_order) * 0.9), 4))
-        for offset, (is_non_rew, label, color) in enumerate(
-            [
-                (False, "Rewarded role", "tab:orange"),
-                (True, "Non-rewarded role", "tab:blue"),
-            ]
-        ):
-            grp = summary[summary["is_non_rewarded"] == is_non_rew].set_index(
-                "odor_index"
-            )
-            means = [
-                grp.loc[o, "mean"] if o in grp.index else np.nan for o in odor_order
-            ]
-            sems = [grp.loc[o, "sem"] if o in grp.index else np.nan for o in odor_order]
-            ax.bar(
-                x + (offset - 0.5) * width,
-                means,
-                width,
-                yerr=sems,
-                capsize=3,
-                label=label,
-                color=color,
-                alpha=0.85,
-            )
-
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"Odor {o}" for o in odor_order])
-        ax.set_ylabel("P(stop)")
-        ax.set_ylim(0, 1.05)
-        ax.set_title(
-            f"Subject {subject} — odor preference ranking\n(ordered by non-rewarded P(stop))"
-        )
-        ax.legend()
-        fig.tight_layout()
-        figures[subject] = fig
-
-    return figures
-
-
-def plot_patch_type_delta_heatmap(trials: pd.DataFrame):
-    """Heatmap of paired ΔP(stop) across valid Rewarded vs NonRewarded patch combinations.
-
-    Each block contributes exactly one (rewarded_label, non_rewarded_label) pair.
-    Within that block, P(stop) is computed separately for each type.  The block-
-    level delta ``P(stop | rewarded) − P(stop | non-rewarded)`` is then averaged
-    across all blocks that share the same label combination.
-
-    This paired-block design is the only valid comparison: data from different
-    blocks is never mixed, and same-odor pairs (which never co-occur in a block)
-    remain masked.
-
-    One figure per subject is returned as a ``{subject_id: figure}`` dict.
-    """
-    import matplotlib.pyplot as plt
-
-    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()].copy()
-    rs["subject_id"] = rs["session_id"].str.split("_").str[0]
-
-    def _odor_idx(label: str) -> int:
-        return int(label.split("_", 1)[0])
-
-    figures = {}
-    for subject, sub in rs.groupby("subject_id"):
-        # compute per-block P(stop) for each patch type present in that block
-        block_patch = (
-            sub.groupby(["session_id", "block", "patch_label"])["has_choice"]
-            .mean()
-            .reset_index(name="p_stop")
-        )
-
-        # split into rewarded and non-rewarded sides, then join on the block key
-        rew = block_patch[
-            ~block_patch["patch_label"].str.contains("NonRewarded")
-        ].rename(columns={"patch_label": "rew_label", "p_stop": "p_stop_rew"})
-        non = block_patch[
-            block_patch["patch_label"].str.contains("NonRewarded")
-        ].rename(columns={"patch_label": "non_label", "p_stop": "p_stop_non"})
-        paired = rew.merge(non, on=["session_id", "block"])
-        paired["delta"] = paired["p_stop_rew"] - paired["p_stop_non"]
-
-        # average paired deltas per (rewarded, non-rewarded) label combination
-        combo = paired.groupby(["rew_label", "non_label"])["delta"].mean().reset_index()
-
-        rew_labels = sorted(combo["rew_label"].unique().tolist(), key=_odor_idx)
-        non_labels = sorted(combo["non_label"].unique().tolist(), key=_odor_idx)
-        nr, nc = len(rew_labels), len(non_labels)
-
-        matrix = np.full((nr, nc), np.nan)
-        for _, row in combo.iterrows():
-            i = rew_labels.index(row["rew_label"])
-            j = non_labels.index(row["non_label"])
-            matrix[i, j] = row["delta"]
-
-        vmax = np.nanmax(np.abs(matrix))
-        fig, ax = plt.subplots(figsize=(max(5, nc * 0.8), max(4, nr * 0.75)))
-        im = ax.imshow(matrix, cmap="RdBu_r", vmin=-vmax, vmax=vmax, aspect="auto")
-        fig.colorbar(
-            im,
-            ax=ax,
-            label="mean paired ΔP(stop)  [rewarded − non-rewarded]",
-            fraction=0.046,
-            pad=0.04,
-        )
-
-        ax.set_xticks(range(nc))
-        ax.set_yticks(range(nr))
-        ax.set_xticklabels([l.replace("_", "\n") for l in non_labels], fontsize=8)
-        ax.set_yticklabels([l.replace("_", "\n") for l in rew_labels], fontsize=8)
-
-        for i in range(nr):
-            for j in range(nc):
-                if not np.isnan(matrix[i, j]):
-                    ax.text(
-                        j,
-                        i,
-                        f"{matrix[i, j]:+.2f}",
-                        ha="center",
-                        va="center",
-                        fontsize=7,
-                        color="black" if abs(matrix[i, j]) < 0.6 * vmax else "white",
-                    )
-
-        ax.set_xlabel("Non-rewarded patch type")
-        ax.set_ylabel("Rewarded patch type")
-        ax.set_title(
-            f"Subject {subject} — mean paired ΔP(stop) per block\n"
-            "(same-odor pairs never co-occur → masked)"
-        )
-        fig.tight_layout()
-        figures[subject] = fig
-
-    return figures
-
-
-def plot_choice_difference_by_block_position_overlay(trials: pd.DataFrame):
-    """Per-day difference (rewarded minus non-rewarded) in ``P(has_choice)``.
-
-    For each subject and first-stop condition, each session (day) contributes
-    one curve: ``P(has_choice | rewarded odor) - P(has_choice | non-rewarded
-    odor)`` as a function of appearance-from-first-stop. Days are coloured by
-    chronological order using a purple gradient. Returns a
-    ``{(subject_id, condition): figure}`` dict.
-    """
-    import matplotlib.pyplot as plt
-    from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import Normalize
-
-    trials = label_first_stop(trials)
-    trials = trials.copy()
-    trials["subject_id"] = trials["session_id"].str.split("_").str[0]
-
-    figures = {}
-    for condition, is_first_stop_rewarded in [
-        ("first-stop rewarded", True),
-        ("first-stop non-rewarded", False),
-    ]:
-        cond = trials[trials["first_stop_rewarded"] == is_first_stop_rewarded]
-        for subject, sub in cond.groupby("subject_id"):
-            sessions = sorted(sub["session_id"].unique())
-            n = len(sessions)
-            shades = [0.35 + 0.65 * (i / max(n - 1, 1)) for i in range(n)]
-            norm = Normalize(vmin=0, vmax=max(n - 1, 1))
-            cmap = plt.get_cmap("Purples")
-
-            fig, ax = plt.subplots(figsize=(7, 4))
-            for day, session_id in enumerate(sessions):
-                rs = _appearance_table(
-                    sub[sub["session_id"] == session_id], from_first_stop=True
-                )
-                rewarded = (
-                    rs[rs["is_rewarded_odor"]]
-                    .groupby("appearance")["has_choice"]
-                    .mean()
-                )
-                non_rewarded = (
-                    rs[~rs["is_rewarded_odor"]]
-                    .groupby("appearance")["has_choice"]
-                    .mean()
-                )
-                diff = rewarded.sub(non_rewarded, fill_value=np.nan).dropna()
-                if diff.empty:
-                    continue
-                ax.plot(
-                    diff.index,
-                    diff.values,
-                    marker="o",
-                    color=cmap(shades[day]),
-                )
-
-            ax.axhline(0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
-            ax.set_xlabel("Appearance from first stop")
-            ax.set_ylabel("ΔP(has_choice)\n[rewarded − non-rewarded]")
-            ax.set_xticks(range(5))
-            cb = fig.colorbar(ScalarMappable(norm=norm, cmap=cmap), ax=ax)
-            cb.set_label("Day")
-            cb.set_ticks([])
             fig.suptitle(f"Subject {subject} — {condition}")
             fig.tight_layout()
             figures[(subject, condition)] = fig
@@ -771,6 +597,12 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
     """
     rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
     rs = rs.sort_values(["session_id", "block", "start_time"])
+    # resolve the subject once per session rather than per block
+    subject_map = (
+        rs.drop_duplicates("session_id")
+        .set_index("session_id")["subject_id"]
+        .to_dict()
+    )
 
     records = []
     for (session_id, block), grp in rs.groupby(["session_id", "block"], sort=False):
@@ -792,7 +624,7 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
 
         records.append(
             {
-                "subject_id": str(session_id).split("_")[0],
+                "subject_id": subject_map[session_id],
                 "session_id": session_id,
                 "block": int(block),
                 "first_stop_rewarded": bool(grp["has_reward"].to_numpy()[first]),
