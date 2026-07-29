@@ -667,3 +667,580 @@ def plot_choice_difference_by_block_position_overlay(trials: pd.DataFrame):
             figures[(subject, condition)] = fig
 
     return figures
+
+
+# ─── Counterfactual learning ──────────────────────────────────────────────────
+#
+# Idea: after the *first* stop of a block the animal has one piece of evidence
+# about the current odor mapping. A purely factual learner only updates the odor
+# it just sampled; a counterfactual learner also updates the odor it did *not*
+# sample (``rewarded here`` implies ``not rewarded there``, and vice versa).
+#
+# Each block is therefore split by whether its first stop was rewarded, and for
+# each split we score the animal's decision at the *next* encounter of each odor
+# type. Perfect behaviour is P(stop | rewarded odor) = 1 and
+# P(stop | non-rewarded odor) = 0 in *both* splits.
+
+#: Column order of the counterfactual matrix. Each entry is
+#: ``(first_stop_rewarded, next_odor_is_rewarded, short_label, ideal_p_stop)``.
+COUNTERFACTUAL_CELLS = [
+    (True, True, "1st stop REW\n→ next REW", 1.0),
+    (True, False, "1st stop REW\n→ next NOREW", 0.0),
+    (False, True, "1st stop NOREW\n→ next REW", 1.0),
+    (False, False, "1st stop NOREW\n→ next NOREW", 0.0),
+]
+
+COUNTERFACTUAL_CELL_KEYS = [(a, b) for a, b, _, _ in COUNTERFACTUAL_CELLS]
+
+#: How each plottable value is rendered. ``ideal`` is the target value in each of
+#: the four :data:`COUNTERFACTUAL_CELLS` columns; ``cmap`` is sequential for the
+#: polarity-corrected ``accuracy`` and diverging (red = stop-ish, blue =
+#: leave-ish) for the raw probabilities, which have opposite targets per column.
+_COUNTERFACTUAL_VALUE_STYLES = {
+    "accuracy": {
+        "cmap": "viridis",
+        "label": "accuracy (higher = better in every row)",
+        "ideal": (1.0, 1.0, 1.0, 1.0),
+    },
+    "p_stop": {
+        "cmap": "coolwarm",
+        "label": "P(stop) at next site",
+        "ideal": tuple(ideal for _, _, _, ideal in COUNTERFACTUAL_CELLS),
+    },
+    "p_leave": {
+        "cmap": "coolwarm",
+        "label": "P(leave) at next site",
+        "ideal": tuple(1.0 - ideal for _, _, _, ideal in COUNTERFACTUAL_CELLS),
+    },
+}
+
+
+def _counterfactual_style(value: str) -> dict:
+    """Validate ``value`` and return its entry in :data:`_COUNTERFACTUAL_VALUE_STYLES`."""
+    try:
+        return _COUNTERFACTUAL_VALUE_STYLES[value]
+    except KeyError:
+        raise ValueError(
+            f"value must be one of {sorted(_COUNTERFACTUAL_VALUE_STYLES)}, got {value!r}"
+        ) from None
+
+
+def _require_counterfactual_value(matrix: pd.DataFrame, value: str) -> None:
+    """Fail readably when ``matrix`` was built before ``value`` was a column.
+
+    A matrix cached in a long-running kernel (or produced by an older version of
+    this module) is missing newer value columns, which would otherwise surface as
+    a bare ``KeyError`` from deep inside the plotting code.
+    """
+    if value not in matrix.columns:
+        available = sorted(
+            c for c in matrix.columns if c in _COUNTERFACTUAL_VALUE_STYLES
+        )
+        raise KeyError(
+            f"{value!r} is not a column of the supplied matrix (it has {available}). "
+            "Rebuild it with counterfactual_session_matrix(trials) -- a matrix held "
+            "over from an earlier kernel state will not have the newer columns."
+        )
+
+
+def _counterfactual_text_color(v: float, cmap: str) -> str:
+    """Black on the light part of ``cmap``, white elsewhere, for cell annotations."""
+    light = v > 0.75 if cmap == "viridis" else 0.35 < v < 0.65
+    return "black" if light else "white"
+
+
+def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
+    """One row per block with the animal's decision at the next odor of each type.
+
+    For every ``(session_id, block)`` the RewardSite trials are walked in
+    temporal order and the first stop (``has_choice``) is located. That stop's
+    ``has_reward`` defines ``first_stop_rewarded``. Strictly *after* that trial
+    we then find the first rewarded-odor site and the first non-rewarded-odor
+    site and record whether the animal stopped there.
+
+    Returns a frame with one row per block and columns
+
+    ``subject_id, session_id, block, first_stop_rewarded, first_stop_pos,
+    stop_next_good, stop_next_bad``
+
+    where the two ``stop_next_*`` columns are nullable booleans -- ``<NA>`` when
+    the block ended before that odor type reappeared. Blocks where the animal
+    never stopped are omitted entirely (no split can be assigned).
+
+    Requires ``block`` (:func:`assign_blocks`) and ``is_rewarded_odor``.
+    """
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    rs = rs.sort_values(["session_id", "block", "start_time"])
+
+    records = []
+    for (session_id, block), grp in rs.groupby(["session_id", "block"], sort=False):
+        choice = grp["has_choice"].to_numpy(dtype=bool)
+        if not choice.any():
+            continue  # never stopped -> block is unlabelled
+        first = int(np.argmax(choice))
+
+        rewarded_odor = grp["is_rewarded_odor"].to_numpy(dtype=bool)
+        post_choice = choice[first + 1 :]
+        post_type = rewarded_odor[first + 1 :]
+
+        def _first_stop_of_type(is_rewarded: bool):
+            """``has_choice`` at the first post-first-stop site of this odor type."""
+            hits = np.flatnonzero(post_type == is_rewarded)
+            if hits.size == 0:
+                return pd.NA
+            return bool(post_choice[hits[0]])
+
+        records.append(
+            {
+                "subject_id": str(session_id).split("_")[0],
+                "session_id": session_id,
+                "block": int(block),
+                "first_stop_rewarded": bool(grp["has_reward"].to_numpy()[first]),
+                "first_stop_pos": first,
+                "stop_next_good": _first_stop_of_type(True),
+                "stop_next_bad": _first_stop_of_type(False),
+            }
+        )
+
+    out = pd.DataFrame.from_records(records)
+    if out.empty:
+        return out
+    for col in ("stop_next_good", "stop_next_bad"):
+        out[col] = out[col].astype("boolean")
+    return out
+
+
+def counterfactual_session_matrix(
+    trials: pd.DataFrame, min_blocks: int = 3
+) -> pd.DataFrame:
+    """Per-session P(stop) for the four counterfactual conditions.
+
+    Aggregates :func:`counterfactual_block_table` over blocks within a session.
+    Returns a long frame with columns ``subject_id, session_id, session_date,
+    session_index, first_stop_rewarded, next_rewarded, p_stop, p_leave,
+    n_blocks, accuracy`` where
+
+    * ``p_stop`` is the fraction of blocks in that condition where the animal
+      stopped at the next site of that odor type, and ``p_leave`` is its
+      complement (ran through without stopping),
+    * ``accuracy`` is ``p_stop`` for rewarded odors and ``1 - p_stop`` for
+      non-rewarded ones, so all four conditions share a *higher-is-better*
+      polarity and can be compared column-to-column,
+    * ``session_index`` is the animal's 0-based chronological session number.
+
+    Cells backed by fewer than ``min_blocks`` blocks are returned with
+    ``p_stop = NaN`` (kept as rows so the heatmap keeps a stable 4-column grid).
+    """
+    blocks = counterfactual_block_table(trials)
+    if blocks.empty:
+        return blocks
+
+    long = blocks.melt(
+        id_vars=["subject_id", "session_id", "block", "first_stop_rewarded"],
+        value_vars=["stop_next_good", "stop_next_bad"],
+        var_name="_next",
+        value_name="stopped",
+    )
+    long["next_rewarded"] = long["_next"] == "stop_next_good"
+    long = long.dropna(subset=["stopped"])
+
+    agg = (
+        long.groupby(
+            ["subject_id", "session_id", "first_stop_rewarded", "next_rewarded"]
+        )["stopped"]
+        .agg(p_stop="mean", n_blocks="count")
+        .reset_index()
+    )
+
+    # Reindex onto the full (session x 4 conditions) grid so missing cells show
+    # up as gaps in the heatmap instead of silently shifting columns.
+    sessions = agg[["subject_id", "session_id"]].drop_duplicates()
+    grid = sessions.merge(
+        pd.DataFrame(
+            COUNTERFACTUAL_CELL_KEYS, columns=["first_stop_rewarded", "next_rewarded"]
+        ),
+        how="cross",
+    )
+    agg = grid.merge(
+        agg,
+        on=["subject_id", "session_id", "first_stop_rewarded", "next_rewarded"],
+        how="left",
+    )
+    agg["n_blocks"] = agg["n_blocks"].fillna(0).astype(int)
+    # cast off the nullable dtype inherited from the boolean mean so downstream
+    # numpy/matplotlib code sees plain float NaN rather than pd.NA
+    agg["p_stop"] = agg["p_stop"].astype(float)
+    agg.loc[agg["n_blocks"] < min_blocks, "p_stop"] = np.nan
+
+    # P(leave) is the exact complement: a site the animal did not stop at is one
+    # it ran through. Ideal is 0 at a rewarded odor and 1 at a non-rewarded one.
+    agg["p_leave"] = 1.0 - agg["p_stop"]
+    agg["accuracy"] = np.where(agg["next_rewarded"], agg["p_stop"], 1.0 - agg["p_stop"])
+
+    # session_id encodes the datetime -> lexicographic sort is chronological
+    agg["session_date"] = agg["session_id"].str.split("_").str[1]
+    agg = agg.sort_values(["subject_id", "session_id"])
+    agg["session_index"] = agg.groupby("subject_id")["session_id"].transform(
+        lambda s: s.rank(method="dense").astype(int) - 1
+    )
+    return agg
+
+
+def _counterfactual_pivot(matrix: pd.DataFrame, subject: str, value: str):
+    """``(n_sessions, 4)`` arrays of ``value`` and block counts for one subject."""
+    sub = matrix[matrix["subject_id"] == subject]
+    sessions = sorted(sub["session_id"].unique())
+    keys = ["session_id", "first_stop_rewarded", "next_rewarded"]
+    values = sub.set_index(keys)[value]
+    n_blocks = sub.set_index(keys)["n_blocks"]
+
+    grid = np.full((len(sessions), len(COUNTERFACTUAL_CELL_KEYS)), np.nan)
+    counts = np.zeros_like(grid, dtype=int)
+    for r, session_id in enumerate(sessions):
+        for c, key in enumerate(COUNTERFACTUAL_CELL_KEYS):
+            idx = (session_id, *key)
+            if idx in values.index:
+                grid[r, c] = values.loc[idx]
+                counts[r, c] = n_blocks.loc[idx]
+    return grid, sessions, counts
+
+
+def plot_counterfactual_heatmap(
+    trials: pd.DataFrame,
+    value: str = "p_leave",
+    min_blocks: int = 3,
+    annotate: bool = True,
+    align_rows: bool = True,
+    matrix: pd.DataFrame | None = None,
+):
+    """Sessions x 4-condition heatmap of counterfactual behaviour, one panel per animal.
+
+    Rows are the animal's sessions (chronological, top = first), columns are the
+    four ``(first stop rewarded?) x (next odor rewarded?)`` conditions.
+
+    ``value`` selects what is coloured:
+
+    * ``"p_leave"`` (default) -- the probability of running the next site through
+      without stopping, on a diverging colormap centred at 0.5. Ideal is 0 in the
+      next-REW columns and 1 in the next-NOREW columns, i.e. blue/red alternating
+      across the pairs.
+    * ``"p_stop"`` -- the complement, ideal 1 / 0 / 1 / 0.
+    * ``"accuracy"`` -- ``p_stop`` in the next-REW columns and ``p_leave`` in the
+      next-NOREW ones, so higher is better everywhere on a sequential colormap. A general
+      rule being acquired shows up as *all four* columns brightening together,
+      condition-specific learning as columns brightening at different rates.
+
+    ``annotate`` writes the value and the backing block count into each cell.
+    ``align_rows`` pads every panel out to the animal with the most sessions so
+    a row is the same height in all panels (comparable at the cost of trailing
+    whitespace); set it False for compact per-animal panels. Pass a precomputed
+    ``matrix`` from :func:`counterfactual_session_matrix` to avoid recomputing.
+    Returns ``(fig, matrix)``.
+    """
+    from matplotlib import pyplot as plt
+
+    style = _counterfactual_style(value)
+    if matrix is None:
+        matrix = counterfactual_session_matrix(trials, min_blocks=min_blocks)
+    _require_counterfactual_value(matrix, value)
+
+    subjects = sorted(matrix["subject_id"].unique())
+    max_rows = max(
+        matrix[matrix["subject_id"] == s]["session_id"].nunique() for s in subjects
+    )
+    cmap = style["cmap"]
+
+    fig, axes = plt.subplots(
+        1,
+        len(subjects),
+        figsize=(3.2 * len(subjects), 0.42 * max_rows + 3.2),
+        squeeze=False,
+        layout="constrained",
+    )
+    images = []
+    for ax, subject in zip(axes[0], subjects):
+        grid, sessions, counts = _counterfactual_pivot(matrix, subject, value)
+        images.append(
+            ax.imshow(
+                grid, cmap=cmap, vmin=0, vmax=1, aspect="auto", interpolation="nearest"
+            )
+        )
+        ax.grid(False)
+        ax.set_xticks(range(len(COUNTERFACTUAL_CELLS)))
+        ax.set_xticklabels(
+            [label for _, _, label, _ in COUNTERFACTUAL_CELLS],
+            rotation=45,
+            ha="right",
+            fontsize=7,
+        )
+        ax.set_yticks(range(len(sessions)))
+        ax.set_yticklabels([s.split("_")[1] for s in sessions], fontsize=6)
+        if align_rows:
+            # pad every panel out to the longest animal so one row = one session
+            # at the same height everywhere, making the panels comparable by eye
+            ax.set_ylim(max_rows - 0.5, -0.5)
+        ax.axvline(1.5, color="white", lw=2.5)  # separate the two first-stop splits
+        ax.set_title(f"Subject {subject}", fontsize=10)
+
+        if annotate:
+            for r in range(grid.shape[0]):
+                for c in range(grid.shape[1]):
+                    v = grid[r, c]
+                    if np.isnan(v):
+                        ax.text(
+                            c, r, "·", ha="center", va="center", color="gray", fontsize=8
+                        )
+                        continue
+                    ax.text(
+                        c,
+                        r,
+                        f"{v:.2f}\nn{counts[r, c]}",
+                        ha="center",
+                        va="center",
+                        fontsize=4.5,
+                        color=_counterfactual_text_color(v, cmap),
+                    )
+
+    axes[0][0].set_ylabel("Session (chronological)")
+    cb = fig.colorbar(images[0], ax=axes[0], fraction=0.02, pad=0.02)
+    cb.set_label(style["label"])
+    ideal = "  —  ideal: " + " / ".join(f"{i:g}" for i in style["ideal"])
+    fig.suptitle(
+        "Counterfactual learning: decision at the next odor of each type,\n"
+        "split by whether the block's first stop was rewarded" + ideal,
+        fontsize=11,
+    )
+    return fig, matrix
+
+
+#: Per-animal series colours for the four counterfactual conditions.
+COUNTERFACTUAL_COLORS = ["#c0392b", "#e07b39", "#1a5276", "#4f8fc0"]
+
+
+def counterfactual_cohort_average(
+    matrix: pd.DataFrame, value: str = "accuracy", min_animals: int = 1
+) -> pd.DataFrame:
+    """Average :func:`counterfactual_session_matrix` across mice per session number.
+
+    Sessions are aligned by ``session_index`` -- each animal's own 0-based
+    chronological session number -- and averaged across animals, so row ``k`` is
+    "the cohort's k-th session". Each animal contributes at most one value per
+    cell, so no animal is weighted by how many blocks it ran.
+
+    Returns one row per ``(session_index, first_stop_rewarded, next_rewarded)``
+    with ``mean``, ``sem`` and ``std`` across animals, ``n_animals``, and
+    ``n_blocks`` (total blocks behind that cell). ``min_animals`` drops session
+    indices backed by fewer than that many animals -- note the tail is thin,
+    since only the longest-running animal reaches the highest indices.
+    """
+    _require_counterfactual_value(matrix, value)
+    agg = (
+        matrix.dropna(subset=[value])
+        .groupby(["session_index", "first_stop_rewarded", "next_rewarded"])
+        .agg(
+            mean=(value, "mean"),
+            sem=(value, "sem"),
+            std=(value, "std"),
+            n_animals=(value, "count"),
+            n_blocks=("n_blocks", "sum"),
+        )
+        .reset_index()
+    )
+    agg["sem"] = agg["sem"].fillna(0.0)
+    return agg[agg["n_animals"] >= min_animals].reset_index(drop=True)
+
+
+def plot_counterfactual_cohort_average(
+    matrix: pd.DataFrame,
+    value: str = "p_leave",
+    min_animals: int = 1,
+    annotate: bool = True,
+):
+    """Cross-mouse counterfactual matrix, laid out with session number on the x axis.
+
+    Two stacked panels sharing that x axis:
+
+    * top -- ``4 conditions x session number`` heatmap, i.e.
+      :func:`plot_counterfactual_heatmap` collapsed across animals and turned on
+      its side so each condition reads left-to-right as one strip.
+    * bottom -- the same four rows as timecourses (mean +- SEM across animals),
+      which is where "do the conditions move together" is easiest to judge.
+
+    ``value`` is ``"p_leave"`` (default, ideal 0 / 1 / 0 / 1 on a diverging
+    colormap), ``"p_stop"`` (its complement) or ``"accuracy"`` (polarity
+    corrected, higher = better everywhere, sequential colormap). Returns
+    ``(fig, cohort)`` where ``cohort`` is the frame from
+    :func:`counterfactual_cohort_average`.
+    """
+    from matplotlib import pyplot as plt
+
+    style = _counterfactual_style(value)
+
+    cohort = counterfactual_cohort_average(
+        matrix, value=value, min_animals=min_animals
+    )
+    labels = [label for _, _, label, _ in COUNTERFACTUAL_CELLS]
+
+    # dense contiguous session axis so the heatmap's extent lines up exactly with
+    # the line plot below it (a skipped index would otherwise shift the strips)
+    lo = int(cohort["session_index"].min())
+    hi = int(cohort["session_index"].max())
+    session_indices = list(range(lo, hi + 1))
+    y = np.arange(len(COUNTERFACTUAL_CELL_KEYS))
+
+    keys = ["session_index", "first_stop_rewarded", "next_rewarded"]
+    means = cohort.set_index(keys)["mean"]
+    sems = cohort.set_index(keys)["sem"]
+    n_animals = cohort.set_index(keys)["n_animals"]
+
+    def _strip(series):
+        """``(4, n_sessions)`` array: one row per condition, one column per session."""
+        return np.array(
+            [
+                [series.get((s, *key), np.nan) for s in session_indices]
+                for key in COUNTERFACTUAL_CELL_KEYS
+            ],
+            dtype=float,
+        )
+
+    grid = _strip(means)
+    grid_sem = _strip(sems)
+    grid_n = _strip(n_animals)
+
+    fig, (ax_hm, ax_ln) = plt.subplots(
+        2,
+        1,
+        figsize=(0.46 * len(session_indices) + 4.5, 8.5),
+        gridspec_kw={"height_ratios": [1, 1.6]},
+        sharex=True,
+        layout="constrained",
+    )
+
+    # ── top: conditions x session number heatmap ──────────────────────────────
+    # extent puts cell centres on integer session numbers so the panel below,
+    # which shares this x axis, lines up column-for-column with the strips
+    im = ax_hm.imshow(
+        grid,
+        cmap=style["cmap"],
+        vmin=0,
+        vmax=1,
+        aspect="auto",
+        extent=(lo - 0.5, hi + 0.5, len(y) - 0.5, -0.5),
+    )
+    ax_hm.grid(False)
+    ax_hm.set_yticks(y)
+    ax_hm.set_yticklabels([label.replace("\n", " ") for label in labels], fontsize=8)
+    ax_hm.axhline(1.5, color="white", lw=2.5)  # separate the two first-stop splits
+    for tick, color in zip(ax_hm.get_yticklabels(), COUNTERFACTUAL_COLORS):
+        tick.set_color(color)
+    if annotate:
+        for r in range(grid.shape[0]):
+            for c, s in enumerate(session_indices):
+                v = grid[r, c]
+                if np.isnan(v):
+                    continue
+                ax_hm.text(
+                    s,
+                    r,
+                    f"{v:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=5,
+                    color=_counterfactual_text_color(v, style["cmap"]),
+                )
+    fig.colorbar(im, ax=(ax_hm, ax_ln), fraction=0.02, pad=0.01).set_label(
+        style["label"], fontsize=9
+    )
+
+    # ── bottom: the same four rows as cohort timecourses ───────────────────────
+    xs = np.asarray(session_indices, dtype=float)
+    for r, ((_, _, label, _), color, ideal) in enumerate(
+        zip(COUNTERFACTUAL_CELLS, COUNTERFACTUAL_COLORS, style["ideal"])
+    ):
+        ok = ~np.isnan(grid[r])
+        ax_ln.errorbar(
+            xs[ok],
+            grid[r][ok],
+            yerr=grid_sem[r][ok],
+            marker="o",
+            ms=5,
+            lw=1.8,
+            capsize=3,
+            color=color,
+            # the target differs per row for the raw probabilities, so name it
+            label=f"{label.replace(chr(10), ' ')}  (ideal {ideal:g})",
+        )
+
+    # shade where fewer than half the animals still contribute, on both panels
+    n_per_session = np.nanmax(grid_n, axis=0)
+    thin = xs[n_per_session < np.nanmax(n_per_session) / 2]
+    if thin.size:
+        for ax, kwargs in ((ax_hm, {}), (ax_ln, {"label": "< half the cohort"})):
+            ax.axvspan(
+                thin.min() - 0.5, hi + 0.5, color="gray", alpha=0.12, zorder=0, **kwargs
+            )
+        ax_hm.axvline(thin.min() - 0.5, color="black", lw=1.2, alpha=0.6)
+        ax_ln.axvline(thin.min() - 0.5, color="black", lw=1.2, alpha=0.6)
+
+    ax_ln.axhline(0.5, color="gray", ls=":", lw=1)
+    ax_ln.set_ylim(-0.03, 1.05)
+    ax_ln.set_xlim(lo - 0.5, hi + 0.5)
+    ax_ln.xaxis.get_major_locator().set_params(integer=True)
+    ax_ln.set_xlabel("Session number (aligned across mice)")
+    ax_ln.set_ylabel(style["label"])
+    ax_ln.legend(frameon=False, fontsize=7.5, loc="lower right", ncol=2)
+
+    # animal count per session number along the top
+    ax_top = ax_hm.secondary_xaxis("top")
+    ax_top.set_xticks(session_indices)
+    ax_top.set_xticklabels(
+        [str(int(n)) if np.isfinite(n) else "" for n in n_per_session],
+        fontsize=5.5,
+    )
+    ax_top.set_xlabel("animals contributing", fontsize=8)
+
+    fig.suptitle(
+        "Counterfactual learning, averaged across mice at the same session number\n"
+        "(error bars = SEM across animals; n per session falls off as animals run out)",
+        fontsize=11,
+    )
+    return fig, cohort
+
+
+def counterfactual_session_trends(
+    matrix: pd.DataFrame, value: str = "accuracy"
+) -> pd.DataFrame:
+    """Per-subject, per-condition OLS slope of ``value`` against session index.
+
+    A candidate summary metric: if the animal is acquiring a *general* rule the
+    four slopes should be similar; if it learns each condition separately the
+    slopes diverge -- in particular the counterfactual cells, where the odor at
+    ``t+1`` is *not* the one sampled at the first stop, would lag behind.
+
+    Returns one row per ``(subject_id, first_stop_rewarded, next_rewarded)``
+    with ``slope`` (units of ``value`` per session), ``intercept``, ``r``, and
+    ``n_sessions``. Conditions with fewer than 3 usable sessions are skipped.
+    """
+    rows = []
+    for (subject, fsr, nr), grp in matrix.groupby(
+        ["subject_id", "first_stop_rewarded", "next_rewarded"]
+    ):
+        g = grp.dropna(subset=[value]).sort_values("session_index")
+        if len(g) < 3:
+            continue
+        x = g["session_index"].to_numpy(dtype=float)
+        y = g[value].to_numpy(dtype=float)
+        slope, intercept = np.polyfit(x, y, 1)
+        rows.append(
+            {
+                "subject_id": subject,
+                "first_stop_rewarded": fsr,
+                "next_rewarded": nr,
+                "slope": slope,
+                "intercept": intercept,
+                "r": np.corrcoef(x, y)[0, 1],
+                "n_sessions": len(g),
+            }
+        )
+    return pd.DataFrame(rows)
+
