@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.15"
+__generated_with = "0.23.14"
 app = marimo.App(width="full")
 
 
@@ -12,6 +12,41 @@ def imports_marimo():
 
 
 @app.cell
+def figure_output(mo):
+    import itertools
+    import re
+    from pathlib import Path as _Path
+
+    from matplotlib import pyplot as plt
+
+    SCRATCH_DIR = _Path('./scratch')
+    IS_SCRIPT = mo.app_meta().mode == 'script'
+
+    def _figure_slug(fig, fallback):
+        _title = fig.get_suptitle() if hasattr(fig, 'get_suptitle') else ''
+        if not _title and fig.axes:
+            _title = fig.axes[0].get_title()
+        _slug = re.sub(r'[^a-z0-9]+', '-', _title.split('\n')[0].strip().lower()).strip('-')
+        return _slug[:60] or fallback
+
+    _fig_counter = itertools.count()
+
+    def _save_open_figures(*args, **kwargs):
+        SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+        for _num in plt.get_fignums():
+            _figure = plt.figure(_num)
+            _path = SCRATCH_DIR / f'{next(_fig_counter):03d}-{_figure_slug(_figure, f"figure{_num}")}.png'
+            _figure.savefig(_path, dpi=150, bbox_inches='tight')
+            print(f'saved {_path}')
+        plt.close('all')
+
+    if IS_SCRIPT:
+        plt.switch_backend('Agg')
+        plt.show = _save_open_figures
+    return (plt,)
+
+
+@app.cell
 def imports_subprocess():
     import subprocess
 
@@ -20,14 +55,6 @@ def imports_subprocess():
 
 @app.cell
 def imports_data_loading():
-    # Edits to helpers.py / viz_helpers.py are picked up by marimo's own module
-    # autoreloading -- no IPython %autoreload needed. Unlike %autoreload, marimo
-    # re-executes the affected cells rather than hot-patching function bodies, so
-    # adding a new module-level name works too (that was the case that produced
-    # `NameError: name '_foo' is not defined` in the Jupyter version).
-    #
-    # Enable it once via Settings -> "Module autoreloading" -> autorun, or via the
-    # [tool.marimo.runtime] auto_reload setting already added to pyproject.toml.
     from pathlib import Path
 
     from data_loading import sync_open_data_sessions
@@ -70,10 +97,8 @@ def load_and_prepare_trials():
     # here, once, so every grouping below is right -- and print which overrides
     # actually matched rather than assuming they did.
     # https://github.com/AllenNeuralDynamics/aind-scientific-computing/issues/855
-    print("Subject overrides (see helpers.SESSION_SUBJECT_OVERRIDES):")
     print(report_subject_overrides(trials).to_string(index=False))
     trials = add_subject_id(trials)
-
     trials = assign_blocks(trials)
 
     # Drop sessions shorter than 15 minutes (first to last site timestamp)
@@ -85,12 +110,7 @@ def load_and_prepare_trials():
     long_sessions = session_duration[session_duration >= threshold].index
     trials = trials[trials["session_id"].isin(long_sessions)]
 
-    # Keep the [start_frac, end_frac] window of each session (fractions from its
-    # start). end_frac=1.0 keeps the whole session; end_frac=0.7 would keep the
-    # first 70%.
     trials = trim_sessions(trials, start_frac=0.0, end_frac=1.0)
-    trials = trials.copy()
-
 
     def is_rewarded(patch_label: str) -> bool:
         return "NonRewarded" not in patch_label
@@ -176,10 +196,9 @@ def sql_over_trials(mo, trials_all):
 
 
 @app.cell
-def choice_by_block_position_pooled(SUBJECT_IDS, trials):
+def choice_by_block_position_pooled(SUBJECT_IDS, plt, trials):
     from helpers import plot_choice_by_block_position
     from viz_helpers import a_lot_of_style
-    from matplotlib import pyplot as plt
     for _animal in SUBJECT_IDS:
         print(f'Animal {_animal}')
         _fig = plt.figure(figsize=(10, 6))
@@ -187,7 +206,7 @@ def choice_by_block_position_pooled(SUBJECT_IDS, trials):
         with a_lot_of_style():
             plot_choice_by_block_position(trials[trials['subject_id'] == _animal], ax=_ax)
     plt.show()
-    return a_lot_of_style, plt
+    return (a_lot_of_style,)
 
 
 @app.cell
@@ -409,6 +428,70 @@ def history_glm_reward_cells(a_lot_of_style, coefs, np, plt, subjects):
 
 
 @app.cell
+def window_controls(mo):
+    window_blocks = mo.ui.slider(2, 100, 1, value=100, label='Window size (blocks)', show_value=True)
+    skip_blocks = mo.ui.slider(1, 100, 1, value=20, label='Skip / stride (blocks)', show_value=True)
+    min_blocks_window = mo.ui.slider(1, 20, 1, value=3, label='Min blocks per counterfactual cell', show_value=True)
+    mo.vstack([window_blocks, skip_blocks, min_blocks_window])
+    return min_blocks_window, skip_blocks, window_blocks
+
+
+@app.cell
+def history_glm_per_window(skip_blocks, trials, window_blocks):
+    from helpers import expand_to_block_windows, fit_history_glm, history_glm_features
+
+    # Same regressors and same unregularised fit as the per-session GLM above, with
+    # a window of blocks as the unit of analysis instead of a session. The 1-back
+    # history is built *before* windowing, so a window boundary is never mistaken
+    # for a block boundary. Windows are cut over the blocks `trials` still holds,
+    # i.e. the ones that survive the degenerate-block filter the session fit uses.
+    glm_features = history_glm_features(trials)
+    glm_windows = expand_to_block_windows(glm_features, window_blocks.value, skip_blocks.value)
+    coefs_window = fit_history_glm(glm_windows, unit_col=['subject_id', 'window'])
+    window_bounds = glm_windows.drop_duplicates('window').set_index('window')[['window_start', 'window_end']].sort_index()
+    print(f'{window_blocks.value}-block windows, stride {skip_blocks.value} -> {len(window_bounds)} window positions')
+    print(coefs_window.groupby('subject_id').agg(n_windows=('window', 'nunique'), trials_per_window=('n_trials', 'mean')).round(1).to_string())
+    return coefs_window, window_bounds
+
+
+@app.cell
+def history_glm_reward_cells_by_window(
+    a_lot_of_style,
+    coefs_window,
+    np,
+    plt,
+    window_blocks,
+    window_bounds,
+):
+    # Per-window version of the reward-cell timecourse above: x is the window
+    # number (labelled with its pooled block range) rather than the session date.
+    REWARD_CELLS_WINDOW = {'H_Same_Rew': {'label': 'Same × Rew', 'color': '#e07b39', 'marker': 'o'}, 'H_Same_NoRew': {'label': 'Same × NoRew', 'color': '#f5c18a', 'marker': 'o'}, 'H_Other_Rew': {'label': 'Other × Rew', 'color': '#2a6496', 'marker': 's'}, 'H_Other_NoRew': {'label': 'Other × NoRew', 'color': '#9ecae1', 'marker': 's'}}
+    subjects_window = sorted(coefs_window['subject_id'].unique())
+    with a_lot_of_style():
+        _fig, _axes = plt.subplots(1, len(subjects_window), figsize=(6 * len(subjects_window), 4), sharey=True, squeeze=False)
+        for _ax, _subject in zip(_axes[0], subjects_window):
+            _sub = coefs_window[coefs_window['subject_id'] == _subject]
+            _windows = sorted(_sub['window'].unique())
+            _x = np.arange(len(_windows))
+            _labels = [f"{int(window_bounds.loc[w, 'window_start'])}-{int(window_bounds.loc[w, 'window_end'])}" for w in _windows]
+            for _term, _cell_style in REWARD_CELLS_WINDOW.items():
+                _rows = _sub[_sub['coef'] == _term].set_index('window')
+                _vals = [_rows.loc[w, 'value'] if w in _rows.index else np.nan for w in _windows]
+                _ax.plot(_x, _vals, marker=_cell_style['marker'], color=_cell_style['color'], linewidth=2, markersize=7, label=_cell_style['label'])
+            _ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+            _ax.set_xticks(_x)
+            _ax.set_xticklabels(_labels, rotation=45, ha='right', fontsize=7)
+            _ax.set_xlabel('Block window (pooled block range)')
+            _ax.set_title(f'Subject {_subject}')
+            _ax.legend(frameon=False, fontsize=8)
+        _axes[0][0].set_ylabel('GLM coefficient')
+        _fig.suptitle(f'One-hot reward cells timecourse over {window_blocks.value}-block windows (sessions pooled per animal)')
+        _fig.tight_layout()
+    plt.show()
+    return
+
+
+@app.cell
 def bias_by_odor_identity(a_lot_of_style, pd, plt, trials):
     _rs = trials[(trials['site_label'] == 'RewardSite') & trials['block'].notna()].copy()
     odor_block = _rs.groupby(['subject_id', 'session_id', 'block', 'odor_index']).agg(p_stop=('has_choice', 'mean'), n_trials=('has_choice', 'count'), is_rewarded_odor=('is_rewarded_odor', 'first')).reset_index()
@@ -497,6 +580,10 @@ def counterfactual_matrix(trials_all):
         "counterfactual_session_matrix",
         "plot_counterfactual_heatmap",
         "plot_counterfactual_cohort_average",
+        "counterfactual_window_matrix",
+        "expand_to_block_windows",
+        "history_glm_features",
+        "fit_history_glm",
         "_counterfactual_style",
         "_COUNTERFACTUAL_VALUE_STYLES",
     ]
@@ -598,6 +685,37 @@ def counterfactual_cohort_by_session(a_lot_of_style, cf, plt):
         _fig, cf_cohort = plot_counterfactual_cohort_average(cf, value='p_leave', min_animals=1)
     plt.show()
     print(cf_cohort.pivot_table(index='session_index', columns=['first_stop_rewarded', 'next_rewarded'], values=['mean', 'n_animals']).round(3).to_string())
+    return
+
+
+@app.cell
+def counterfactual_cohort_by_window(
+    a_lot_of_style,
+    min_blocks_window,
+    plt,
+    skip_blocks,
+    trials,
+    window_blocks,
+):
+    from helpers import counterfactual_window_matrix
+    from helpers import plot_counterfactual_cohort_average as plot_cf_cohort
+
+    cf_window = counterfactual_window_matrix(trials, window_blocks.value, skip_blocks.value, min_blocks=min_blocks_window.value)
+    with a_lot_of_style():
+        _fig, cf_cohort_window = plot_cf_cohort(
+            cf_window,
+            value='p_leave',
+            min_animals=1,
+            x_label=f'Block-window number ({window_blocks.value} blocks, stride {skip_blocks.value}; aligned across mice)',
+            title=f'Counterfactual learning, averaged across mice at the same {window_blocks.value}-block window\n(sessions pooled per animal; error bars = SEM across animals; n falls off as animals run out of blocks)',
+        )
+    plt.show()
+    _have = cf_window.groupby('session_index')['subject_id'].nunique()
+    _contributing = cf_cohort_window.groupby('session_index')['n_animals'].max().reindex(_have.index, fill_value=0)
+    _short = (_have - _contributing).pipe(lambda s: s[s > 0])
+    print(f'{len(_short)} of {len(_have)} windows lose an animal to min_blocks={min_blocks_window.value} (window: animals lost)')
+    print(_short.to_string() if len(_short) else '  none')
+    print(cf_cohort_window.pivot_table(index='session_index', columns=['first_stop_rewarded', 'next_rewarded'], values=['mean', 'n_animals']).round(3).to_string())
     return
 
 

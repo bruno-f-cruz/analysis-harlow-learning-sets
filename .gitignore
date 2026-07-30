@@ -211,3 +211,6 @@ __marimo__/
 
 #
 data/
+
+# figures written by a command-line run of demo_marimo.py
+scratch/

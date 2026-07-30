@@ -13,19 +13,24 @@ directly. Each processor's ``.compute()`` returns a DataFrame indexed by harp
 time (except ``trials``, which is one row per site) and stamps provenance
 (package / data-contract / dataset versions) into ``df.attrs``.
 
+``position_velocity`` and ``licks`` take too long to compute and are therefore
+**skipped by default**; opt in with ``--with-position-velocity`` / ``--with-licks``
+(or ``--all-tables``).
+
 Usage
 -----
 ::
 
-    uv run python process_sessions.py             # process all sessions
-    uv run python process_sessions.py --force     # re-process even if output exists
+    uv run python process_sessions.py                # trials + sessions only
+    uv run python process_sessions.py --all-tables   # also position_velocity + licks
+    uv run python process_sessions.py --force        # re-process even if output exists
 
 Tables written
 --------------
 data/processed/trials.parquet            one row per site
-data/processed/position_velocity.parquet indexed by harp time; position (cm), velocity (cm/s)
-data/processed/licks.parquet              indexed by harp time; is_lick_onset (True=onset, False=offset)
 data/processed/sessions.parquet          one row per session with metadata + versions
+data/processed/position_velocity.parquet (opt-in) indexed by harp time; position (cm), velocity (cm/s)
+data/processed/licks.parquet             (opt-in) indexed by harp time; is_lick_onset (True=onset, False=offset)
 
 Following the upstream package's own convention (see
 ``scripts/example_parquet_pipeline.py``), the harp-time index on
@@ -151,12 +156,26 @@ def _session_dirs(data_root: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 _TABLE_NAMES = ("trials", "position_velocity", "licks", "sessions")
+#: Tables always computed — cheap, and ``sessions`` derives its provenance from
+#: ``trials.attrs``.
+_DEFAULT_TABLES = frozenset({"trials", "sessions"})
+#: Slow per-session modalities, skipped unless explicitly requested.
+_OPTIONAL_TABLES = frozenset({"position_velocity", "licks"})
 #: Tables indexed by harp time; written with their pandas index intact
 #: (``to_parquet()`` default), matching the upstream package's own convention.
 _INDEXED_TABLES = frozenset({"position_velocity", "licks"})
 
 
-def process_all(data_root: Path, force: bool = False) -> None:
+def process_all(
+    data_root: Path,
+    force: bool = False,
+    tables: frozenset[str] | set[str] | None = None,
+) -> None:
+    """Process every session under *data_root*.
+
+    *tables* selects which tables to build; defaults to ``_DEFAULT_TABLES``
+    (``trials`` + ``sessions``). ``trials``/``sessions`` are always included.
+    """
     from aind_behavior_vr_foraging.data_contract import dataset as load_dataset
     from aind_behavior_vr_foraging_packaging.pipeline import (
         get_position_velocity_processor,
@@ -164,12 +183,18 @@ def process_all(data_root: Path, force: bool = False) -> None:
     )
     from aind_behavior_vr_foraging_packaging.processing import LicksProcessor
 
+    selected = _DEFAULT_TABLES | (frozenset(tables) if tables else frozenset())
+
     processed_dir = data_root / "processed"
     processed_dir.mkdir(exist_ok=True)
 
+    skipped = sorted(_OPTIONAL_TABLES - selected)
+    if skipped:
+        _log.info("Skipping slow table(s): %s", ", ".join(skipped))
+
     # Check which tables already exist so we can skip if not forced
     existing = {
-        name for name in _TABLE_NAMES if (processed_dir / f"{name}.parquet").exists()
+        name for name in selected if (processed_dir / f"{name}.parquet").exists()
     }
     if existing and not force:
         _log.info(
@@ -184,7 +209,7 @@ def process_all(data_root: Path, force: bool = False) -> None:
 
     _log.info("Found %d session(s) under %s", len(session_dirs), data_root)
 
-    accumulators: dict[str, list[pd.DataFrame]] = {name: [] for name in _TABLE_NAMES}
+    accumulators: dict[str, list[pd.DataFrame]] = {name: [] for name in selected}
 
     for session_dir in tqdm(session_dirs, desc="Sessions", unit="session"):
         session_id = session_dir.name
@@ -198,8 +223,16 @@ def process_all(data_root: Path, force: bool = False) -> None:
 
         try:
             trials_df = get_trial_table_processor(ds, raise_on_error=False).compute()
-            pos_df = get_position_velocity_processor(ds, raise_on_error=False).compute()
-            licks_df = LicksProcessor(ds, raise_on_error=False).compute()
+            pos_df = (
+                get_position_velocity_processor(ds, raise_on_error=False).compute()
+                if "position_velocity" in selected
+                else None
+            )
+            licks_df = (
+                LicksProcessor(ds, raise_on_error=False).compute()
+                if "licks" in selected
+                else None
+            )
         except Exception:
             _log.warning("Failed to process %s — skipping session", session_id, exc_info=True)
             continue
@@ -214,7 +247,7 @@ def process_all(data_root: Path, force: bool = False) -> None:
             ("licks", licks_df),
             ("sessions", sessions_df),
         ):
-            if df.empty:
+            if df is None or df.empty:
                 continue
             # Prepend session_id to every table except sessions (already has it)
             if "session_id" not in df.columns:
@@ -223,7 +256,7 @@ def process_all(data_root: Path, force: bool = False) -> None:
             accumulators[name].append(df)
 
     # Concatenate and write
-    for name in _TABLE_NAMES:
+    for name in (n for n in _TABLE_NAMES if n in selected):
         parts = accumulators[name]
         if not parts:
             _log.warning("No data collected for table '%s' — skipping", name)
@@ -261,5 +294,30 @@ if __name__ == "__main__":
         action="store_true",
         help="Re-process even when output parquet files already exist",
     )
+    parser.add_argument(
+        "--with-position-velocity",
+        action="store_true",
+        help="Also compute position_velocity (slow; off by default)",
+    )
+    parser.add_argument(
+        "--with-licks",
+        action="store_true",
+        help="Also compute licks (slow; off by default)",
+    )
+    parser.add_argument(
+        "--all-tables",
+        action="store_true",
+        help="Compute every table, including the slow optional ones",
+    )
     args = parser.parse_args()
-    process_all(args.data_dir, force=args.force)
+
+    if args.all_tables:
+        extra = set(_OPTIONAL_TABLES)
+    else:
+        extra = set()
+        if args.with_position_velocity:
+            extra.add("position_velocity")
+        if args.with_licks:
+            extra.add("licks")
+
+    process_all(args.data_dir, force=args.force, tables=extra)

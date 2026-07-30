@@ -864,6 +864,11 @@ def counterfactual_cohort_average(
     ``n_blocks`` (total blocks behind that cell). ``min_animals`` drops session
     indices backed by fewer than that many animals -- note the tail is thin,
     since only the longest-running animal reaches the highest indices.
+
+    ``n_animals`` counts animals whose cell *survived* the ``min_blocks``
+    threshold of the matrix, not animals that reached that session/window, so it
+    is **not** monotonic: an animal whose blocks happen to split unevenly across
+    the four conditions can be missing at index k and back at k + 1.
     """
     _require_counterfactual_value(matrix, value)
     agg = (
@@ -887,6 +892,11 @@ def plot_counterfactual_cohort_average(
     value: str = "p_leave",
     min_animals: int = 1,
     annotate: bool = True,
+    x_label: str = "Session number (aligned across mice)",
+    title: str = (
+        "Counterfactual learning, averaged across mice at the same session number\n"
+        "(error bars = SEM across animals; n per session falls off as animals run out)"
+    ),
 ):
     """Cross-mouse counterfactual matrix, laid out with session number on the x axis.
 
@@ -903,6 +913,10 @@ def plot_counterfactual_cohort_average(
     corrected, higher = better everywhere, sequential colormap). Returns
     ``(fig, cohort)`` where ``cohort`` is the frame from
     :func:`counterfactual_cohort_average`.
+
+    ``x_label`` and ``title`` only exist so the same panels can be relabelled
+    when ``session_index`` carries something other than a session number -- e.g.
+    the block-window number from :func:`counterfactual_window_matrix`.
     """
     from matplotlib import pyplot as plt
 
@@ -1003,22 +1017,47 @@ def plot_counterfactual_cohort_average(
             label=f"{label.replace(chr(10), ' ')}  (ideal {ideal:g})",
         )
 
-    # shade where fewer than half the animals still contribute, on both panels
-    n_per_session = np.nanmax(grid_n, axis=0)
-    thin = xs[n_per_session < np.nanmax(n_per_session) / 2]
-    if thin.size:
-        for ax, kwargs in ((ax_hm, {}), (ax_ln, {"label": "< half the cohort"})):
+    # shade where fewer than half the animals still contribute, on both panels.
+    # A column can be entirely empty -- every condition below ``min_blocks``, which
+    # happens easily for narrow block windows -- so the per-column max is taken
+    # only over columns that have data; the empty ones stay NaN and drop out of the
+    # comparison below rather than triggering an all-NaN nanmax.
+    n_per_session = np.full(grid_n.shape[1], np.nan)
+    populated = ~np.all(np.isnan(grid_n), axis=0)
+    n_per_session[populated] = np.nanmax(grid_n[:, populated], axis=0)
+
+    # An animal drops out of a column whenever *that* cell falls below
+    # ``min_blocks``, which is not monotonic in session/window number: it can be
+    # missing at k and back at k+1 (common for narrow block windows, where 20
+    # blocks split four ways leave only a handful per cell). So shade each thin
+    # column on its own rather than assuming everything right of the first thin one
+    # is thin, and keep the boundary line for the trailing run of thin columns --
+    # the only place where the cohort has genuinely run out.
+    thin = ~(n_per_session >= np.nanmax(n_per_session) / 2)  # NaN column -> thin
+    tail = len(thin)
+    while tail > 0 and thin[tail - 1]:
+        tail -= 1
+    spans = [(xs[tail] - 0.5, hi + 0.5)] if tail < len(xs) else []
+    spans += [(x - 0.5, x + 0.5) for x in xs[:tail][thin[:tail]]]
+    for ax, legend_label in ((ax_hm, None), (ax_ln, "< half the cohort")):
+        for i, (x0, x1) in enumerate(spans):
             ax.axvspan(
-                thin.min() - 0.5, hi + 0.5, color="gray", alpha=0.12, zorder=0, **kwargs
+                x0,
+                x1,
+                color="gray",
+                alpha=0.12,
+                zorder=0,
+                label=legend_label if i == 0 else None,
             )
-        ax_hm.axvline(thin.min() - 0.5, color="black", lw=1.2, alpha=0.6)
-        ax_ln.axvline(thin.min() - 0.5, color="black", lw=1.2, alpha=0.6)
+    if tail < len(xs):
+        ax_hm.axvline(xs[tail] - 0.5, color="black", lw=1.2, alpha=0.6)
+        ax_ln.axvline(xs[tail] - 0.5, color="black", lw=1.2, alpha=0.6)
 
     ax_ln.axhline(0.5, color="gray", ls=":", lw=1)
     ax_ln.set_ylim(-0.03, 1.05)
     ax_ln.set_xlim(lo - 0.5, hi + 0.5)
     ax_ln.xaxis.get_major_locator().set_params(integer=True)
-    ax_ln.set_xlabel("Session number (aligned across mice)")
+    ax_ln.set_xlabel(x_label)
     ax_ln.set_ylabel(style["label"])
     ax_ln.legend(frameon=False, fontsize=7.5, loc="lower right", ncol=2)
 
@@ -1029,13 +1068,13 @@ def plot_counterfactual_cohort_average(
         [str(int(n)) if np.isfinite(n) else "" for n in n_per_session],
         fontsize=5.5,
     )
-    ax_top.set_xlabel("animals contributing", fontsize=8)
-
-    fig.suptitle(
-        "Counterfactual learning, averaged across mice at the same session number\n"
-        "(error bars = SEM across animals; n per session falls off as animals run out)",
-        fontsize=11,
+    ax_top.set_xlabel(
+        "animals contributing (max over the 4 conditions; a cell below "
+        "min_blocks drops out, so this can dip and recover)",
+        fontsize=8,
     )
+
+    fig.suptitle(title, fontsize=11)
     return fig, cohort
 
 
@@ -1075,4 +1114,233 @@ def counterfactual_session_trends(
             }
         )
     return pd.DataFrame(rows)
+
+
+# ─── Block windows ────────────────────────────────────────────────────────────
+#
+# Session boundaries are an artefact of how the data was collected, not of how the
+# animal learns. These helpers treat each animal as if all of its data came from a
+# single long session: every block is pooled in chronological order and that stream
+# is then cut into sliding windows of a fixed number of blocks. ``skip == window``
+# gives non-overlapping windows, ``skip < window`` overlapping ones, and
+# ``skip > window`` leaves gaps. Only *full* windows are emitted.
+
+
+def pooled_block_ordinal(trials: pd.DataFrame) -> pd.DataFrame:
+    """Chronological 0-based block number per animal, pooled across sessions.
+
+    Only blocks actually present in ``trials`` are ranked, so a frame that has
+    already had blocks filtered out (e.g. the degenerate ``p_stay in {0, 1}``
+    blocks) yields a dense ordinal over the survivors rather than a gappy one.
+
+    Returns one row per ``(subject_id, session_id, block)`` plus
+    ``block_ordinal``. ``session_id`` encodes the acquisition datetime, so
+    sorting it lexicographically is chronological.
+    """
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    keys = (
+        rs[["subject_id", "session_id", "block"]]
+        .drop_duplicates()
+        .sort_values(["subject_id", "session_id", "block"])
+        .reset_index(drop=True)
+    )
+    keys["block_ordinal"] = keys.groupby("subject_id").cumcount()
+    return keys
+
+
+def block_window_index(
+    trials: pd.DataFrame, window_blocks: int, skip_blocks: int
+) -> pd.DataFrame:
+    """Map every block to the sliding windows that contain it.
+
+    Windows start at the block ordinals ``0, skip_blocks, 2 * skip_blocks, ...``
+    and span ``window_blocks`` blocks each. Only windows with the full
+    ``window_blocks`` are emitted, so an animal's trailing blocks are dropped
+    when its count is not an exact multiple of the stride and every window rests
+    on the same amount of data.
+
+    Returns ``(subject_id, session_id, block, block_ordinal, window,
+    window_start, window_end)`` -- one row per (block, window) pair, so an
+    overlapping window layout lists a block once per window containing it.
+    """
+    if window_blocks < 1 or skip_blocks < 1:
+        raise ValueError(
+            f"window_blocks and skip_blocks must both be >= 1, "
+            f"got {window_blocks} and {skip_blocks}"
+        )
+
+    keys = pooled_block_ordinal(trials)
+    parts = []
+    for _, grp in keys.groupby("subject_id", sort=False):
+        starts = range(0, len(grp) - window_blocks + 1, skip_blocks)
+        for window, start in enumerate(starts):
+            end = start + window_blocks - 1
+            part = grp[grp["block_ordinal"].between(start, end)].copy()
+            part["window"] = window
+            part["window_start"] = start
+            part["window_end"] = end
+            parts.append(part)
+
+    if not parts:
+        longest = keys.groupby("subject_id").size().max() if len(keys) else 0
+        raise ValueError(
+            f"no animal has {window_blocks} blocks to fill a window "
+            f"(the longest-running one has {longest})"
+        )
+    return pd.concat(parts, ignore_index=True)
+
+
+def expand_to_block_windows(
+    trials: pd.DataFrame, window_blocks: int, skip_blocks: int
+) -> pd.DataFrame:
+    """RewardSite trials tagged with the ``window`` they belong to.
+
+    Rows are duplicated once per containing window when the windows overlap, so
+    grouping the result by ``["subject_id", "window"]`` gives each window's
+    trials. Windowing is done over the blocks present in ``trials``
+    (see :func:`pooled_block_ordinal`).
+    """
+    windows = block_window_index(trials, window_blocks, skip_blocks)
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    return rs.merge(windows, on=["subject_id", "session_id", "block"], how="inner")
+
+
+def counterfactual_window_matrix(
+    trials: pd.DataFrame,
+    window_blocks: int,
+    skip_blocks: int,
+    min_blocks: int = 3,
+) -> pd.DataFrame:
+    """Per-block-window analogue of :func:`counterfactual_session_matrix`.
+
+    Each animal's blocks are pooled across sessions and cut into windows of
+    ``window_blocks`` blocks with a stride of ``skip_blocks``
+    (:func:`block_window_index`); the counterfactual aggregation then runs per
+    window instead of per session.
+
+    Implemented by re-keying the trials rather than reimplementing the
+    aggregation: ``session_id`` becomes a synthetic ``"{subject}_w{window:04d}"``
+    window key and ``block`` becomes the animal's global block ordinal (so two
+    blocks that share a per-session number but sit in different real sessions of
+    the same window stay distinct). The result therefore has exactly the columns
+    of :func:`counterfactual_session_matrix`, with ``session_id`` holding the
+    window key and ``session_index`` the 0-based window number, plus explicit
+    ``window`` / ``window_start`` / ``window_end`` columns. Downstream plotters
+    that key off ``session_index`` work unchanged.
+    """
+    expanded = expand_to_block_windows(trials, window_blocks, skip_blocks)
+    rekeyed = expanded.assign(
+        session_id=expanded["subject_id"].astype(str)
+        + "_w"
+        + expanded["window"].map("{:04d}".format),
+        block=expanded["block_ordinal"],
+    )
+    matrix = counterfactual_session_matrix(rekeyed, min_blocks=min_blocks)
+    matrix["window"] = (
+        matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
+    )
+    bounds = expanded.drop_duplicates("window")[
+        ["window", "window_start", "window_end"]
+    ]
+    return matrix.merge(bounds, on="window", how="left")
+
+
+# ─── History GLM ──────────────────────────────────────────────────────────────
+
+#: Regressors of the 1-back within-block logistic GLM on ``P(choice)``. The two
+#: ``IsPrevChoice_*`` terms are signed (+1 stopped / -1 ran through / 0 when the
+#: previous odor was of the other kind); the four ``H_*`` terms are the one-hot
+#: ``(is_same_odor x is_prev_rewarded)`` reward cells. No intercept is fit.
+HISTORY_GLM_COEFS = [
+    "IsPrevChoice_SameOdor",
+    "IsPrevChoice_OtherOdor",
+    "H_Same_Rew",
+    "H_Same_NoRew",
+    "H_Other_Rew",
+    "H_Other_NoRew",
+]
+
+
+def history_glm_features(trials: pd.DataFrame) -> pd.DataFrame:
+    """RewardSite trials with the 1-back within-block history regressors.
+
+    The previous trial's odor, choice and reward are taken with a ``shift(1)``
+    *within* each real ``(session_id, block)``, so history never crosses a block
+    or a session boundary and the first trial of every block drops out. This is
+    deliberately done before any windowing: a window is a way of grouping blocks
+    for fitting, never a boundary the 1-back history should see.
+
+    Adds :data:`HISTORY_GLM_COEFS` and the integer ``choice`` target.
+    """
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()].copy()
+    rs = rs.sort_values(["session_id", "block", "start_time"])
+    grp = rs.groupby(["session_id", "block"], sort=False)
+    rs["prev_odor_index"] = grp["odor_index"].shift(1)
+    rs["prev_has_choice"] = grp["has_choice"].shift(1)
+    rs["prev_has_reward"] = grp["has_reward"].shift(1)
+    rs = rs.dropna(subset=["prev_odor_index", "prev_has_choice", "prev_has_reward"])
+
+    is_same = (rs["odor_index"] == rs["prev_odor_index"]).to_numpy()
+    prev_choice = rs["prev_has_choice"].astype(bool).to_numpy()
+    prev_rewarded = rs["prev_has_reward"].astype(bool).to_numpy()
+
+    rs["IsPrevChoice_SameOdor"] = np.where(
+        is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
+    rs["IsPrevChoice_OtherOdor"] = np.where(
+        ~is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
+    rs["H_Same_Rew"] = (is_same & prev_rewarded).astype(float)
+    rs["H_Same_NoRew"] = (is_same & ~prev_rewarded).astype(float)
+    rs["H_Other_Rew"] = (~is_same & prev_rewarded).astype(float)
+    rs["H_Other_NoRew"] = (~is_same & ~prev_rewarded).astype(float)
+    rs["choice"] = rs["has_choice"].astype(int)
+    return rs
+
+
+def fit_history_glm(
+    features: pd.DataFrame,
+    unit_col="session_id",
+    min_trials: int = 10,
+) -> pd.DataFrame:
+    """Fit the history GLM independently within each ``unit_col`` group.
+
+    ``unit_col`` is a column name or a list of them -- ``"session_id"`` for the
+    per-session fit, ``["subject_id", "window"]`` for the per-block-window one
+    (``window`` alone would pool animals). Unregularised logistic regression, no
+    intercept. Groups with fewer than ``min_trials`` trials or no variance in
+    ``choice`` are skipped, as is any group whose fit raises.
+
+    Returns a long frame with the unit column(s) plus
+    ``subject_id, coef, value``.
+    """
+    from sklearn.linear_model import LogisticRegression
+
+    unit_cols = [unit_col] if isinstance(unit_col, str) else list(unit_col)
+    records = []
+    for unit, sdf in features.groupby(unit_cols, sort=True):
+        key = dict(zip(unit_cols, unit if isinstance(unit, tuple) else (unit,)))
+        if len(sdf) < min_trials or sdf["choice"].nunique() < 2:
+            continue
+        X = sdf[HISTORY_GLM_COEFS].to_numpy(dtype=float)
+        y = sdf["choice"].to_numpy(dtype=int)
+        try:
+            clf = LogisticRegression(
+                C=np.inf, solver="lbfgs", fit_intercept=False, max_iter=500
+            )
+            clf.fit(X, y)
+        except Exception as exc:  # a single unusable group must not kill the sweep
+            print(f"{key} failed: {exc}")
+            continue
+        for name, val in zip(HISTORY_GLM_COEFS, clf.coef_[0]):
+            records.append(
+                {
+                    **key,
+                    "subject_id": sdf["subject_id"].iloc[0],
+                    "coef": name,
+                    "value": val,
+                    "n_trials": len(sdf),
+                }
+            )
+    return pd.DataFrame(records)
 
