@@ -84,7 +84,8 @@ def _build_sessions(
         "n_trials": n_trials,
         "dataset_version": provenance.get("dataset_version"),
         "data_contract_version": provenance.get("data_contract_version"),
-        "packaging_version": provenance.get("packaging_version") or _packaging_version(),
+        "packaging_version": provenance.get("packaging_version")
+        or _packaging_version(),
     }
 
     logs_dir = _find_logs_dir(local_dir)
@@ -234,7 +235,9 @@ def process_all(
                 else None
             )
         except Exception:
-            _log.warning("Failed to process %s — skipping session", session_id, exc_info=True)
+            _log.warning(
+                "Failed to process %s — skipping session", session_id, exc_info=True
+            )
             continue
 
         sessions_df = _build_sessions(

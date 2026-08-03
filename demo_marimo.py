@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.14"
+__generated_with = "0.23.16"
 app = marimo.App(width="full")
 
 
@@ -19,14 +19,16 @@ def figure_output(mo):
 
     from matplotlib import pyplot as plt
 
-    SCRATCH_DIR = _Path('./scratch')
-    IS_SCRIPT = mo.app_meta().mode == 'script'
+    SCRATCH_DIR = _Path("./scratch")
+    IS_SCRIPT = mo.app_meta().mode == "script"
 
     def _figure_slug(fig, fallback):
-        _title = fig.get_suptitle() if hasattr(fig, 'get_suptitle') else ''
+        _title = fig.get_suptitle() if hasattr(fig, "get_suptitle") else ""
         if not _title and fig.axes:
             _title = fig.axes[0].get_title()
-        _slug = re.sub(r'[^a-z0-9]+', '-', _title.split('\n')[0].strip().lower()).strip('-')
+        _slug = re.sub(r"[^a-z0-9]+", "-", _title.split("\n")[0].strip().lower()).strip(
+            "-"
+        )
         return _slug[:60] or fallback
 
     _fig_counter = itertools.count()
@@ -35,13 +37,16 @@ def figure_output(mo):
         SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
         for _num in plt.get_fignums():
             _figure = plt.figure(_num)
-            _path = SCRATCH_DIR / f'{next(_fig_counter):03d}-{_figure_slug(_figure, f"figure{_num}")}.png'
-            _figure.savefig(_path, dpi=150, bbox_inches='tight')
-            print(f'saved {_path}')
-        plt.close('all')
+            _path = (
+                SCRATCH_DIR
+                / f"{next(_fig_counter):03d}-{_figure_slug(_figure, f'figure{_num}')}.png"
+            )
+            _figure.savefig(_path, dpi=150, bbox_inches="tight")
+            print(f"saved {_path}")
+        plt.close("all")
 
     if IS_SCRIPT:
-        plt.switch_backend('Agg')
+        plt.switch_backend("Agg")
         plt.show = _save_open_figures
     return (plt,)
 
@@ -75,7 +80,7 @@ def sync_raw_data(Path, subprocess, sync_open_data_sessions):
             confirm=False,
         )
         #! uv run python process_sessions.py
-        subprocess.call(['uv', 'run', 'python', 'process_sessions.py'])
+        subprocess.call(["uv", "run", "python", "process_sessions.py"])
     return (SUBJECT_IDS,)
 
 
@@ -106,7 +111,11 @@ def load_and_prepare_trials():
     session_end = trials.groupby("session_id")["start_time"].max()
     session_duration = session_end - session_start
     # Handle both timedelta and numeric (seconds) dtypes
-    threshold = pd.Timedelta(minutes=15) if pd.api.types.is_timedelta64_dtype(session_duration) else 15 * 60
+    threshold = (
+        pd.Timedelta(minutes=15)
+        if pd.api.types.is_timedelta64_dtype(session_duration)
+        else 15 * 60
+    )
     long_sessions = session_duration[session_duration >= threshold].index
     trials = trials[trials["session_id"].isin(long_sessions)]
 
@@ -115,10 +124,8 @@ def load_and_prepare_trials():
     def is_rewarded(patch_label: str) -> bool:
         return "NonRewarded" not in patch_label
 
-
     def odor_index(odor_concentration: list[float] | np.ndarray) -> int:
         return np.argmax(np.array(odor_concentration))
-
 
     trials["is_rewarded_odor"] = trials["patch_label"].apply(is_rewarded)
     trials["odor_index"] = trials["odor_concentration"].apply(odor_index)
@@ -199,12 +206,15 @@ def sql_over_trials(mo, trials_all):
 def choice_by_block_position_pooled(SUBJECT_IDS, plt, trials):
     from helpers import plot_choice_by_block_position
     from viz_helpers import a_lot_of_style
+
     for _animal in SUBJECT_IDS:
-        print(f'Animal {_animal}')
+        print(f"Animal {_animal}")
         _fig = plt.figure(figsize=(10, 6))
         _ax = _fig.add_subplot(111)
         with a_lot_of_style():
-            plot_choice_by_block_position(trials[trials['subject_id'] == _animal], ax=_ax)
+            plot_choice_by_block_position(
+                trials[trials["subject_id"] == _animal], ax=_ax
+            )
     plt.show()
     return (a_lot_of_style,)
 
@@ -225,7 +235,7 @@ def choice_by_first_stop(a_lot_of_style, plt, trials):
     from helpers import plot_choice_by_block_position_by_first_stop
 
     with a_lot_of_style():
-        plot_choice_by_block_position_by_first_stop(trials, single_axis=True)
+        plot_choice_by_block_position_by_first_stop(trials)
 
     plt.show()
     return
@@ -251,32 +261,62 @@ def choice_at_first_stops_across_sessions(
     trials,
 ):
     # P(choice) at the very first trial of every block, averaged within session, plotted across sessions
-    _rs = trials[(trials['site_label'] == 'RewardSite') & trials['block'].notna()].copy()
-    _rs = _rs.sort_values(['session_id', 'block', 'start_time'])
-    _rs['_block_pos'] = _rs.groupby(['session_id', 'block']).cumcount()
-    _rs['session_date'] = _rs['session_id'].str.split('_').str[1]
-    STOP_STYLES = {0: {'label': '1st stop', 'color': 'tab:blue'}, 1: {'label': '2nd stop', 'color': 'tab:orange'}, 2: {'label': '3rd stop', 'color': 'tab:green'}}
+    _rs = trials[
+        (trials["site_label"] == "RewardSite") & trials["block"].notna()
+    ].copy()
+    _rs = _rs.sort_values(["session_id", "block", "start_time"])
+    _rs["_block_pos"] = _rs.groupby(["session_id", "block"]).cumcount()
+    _rs["session_date"] = _rs["session_id"].str.split("_").str[1]
+    STOP_STYLES = {
+        0: {"label": "1st stop", "color": "tab:blue"},
+        1: {"label": "2nd stop", "color": "tab:orange"},
+        2: {"label": "3rd stop", "color": "tab:green"},
+    }
     # Add subject and session date label for plotting
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(1, len(SUBJECT_IDS), figsize=(5 * len(SUBJECT_IDS), 4), sharey=True, squeeze=False)
+        _fig, _axes = plt.subplots(
+            1,
+            len(SUBJECT_IDS),
+            figsize=(5 * len(SUBJECT_IDS), 4),
+            sharey=True,
+            squeeze=False,
+        )
         for _ax, _animal in zip(_axes[0], SUBJECT_IDS):
             for stop_pos, _style in STOP_STYLES.items():
-                stop_trials = _rs[_rs['_block_pos'] == stop_pos].copy()
-                session_means = stop_trials.groupby(['subject_id', 'session_id', 'session_date'])['has_choice'].mean().reset_index()
-                _sub = session_means[session_means['subject_id'] == _animal].sort_values('session_id')
+                stop_trials = _rs[_rs["_block_pos"] == stop_pos].copy()
+                session_means = (
+                    stop_trials.groupby(["subject_id", "session_id", "session_date"])[
+                        "has_choice"
+                    ]
+                    .mean()
+                    .reset_index()
+                )
+                _sub = session_means[
+                    session_means["subject_id"] == _animal
+                ].sort_values("session_id")
                 _x = np.arange(len(_sub))
-                _ax.plot(_x, _sub['has_choice'], marker='o', color=_style['color'], label=_style['label'])
-            first_stop_sub = _rs[(_rs['_block_pos'] == 0) & (_rs['subject_id'] == _animal)]
-            _dates = sorted(first_stop_sub['session_id'].unique())
-            date_labels = [s.split('_')[1] for s in _dates]
+                _ax.plot(
+                    _x,
+                    _sub["has_choice"],
+                    marker="o",
+                    color=_style["color"],
+                    label=_style["label"],
+                )
+            first_stop_sub = _rs[
+                (_rs["_block_pos"] == 0) & (_rs["subject_id"] == _animal)
+            ]
+            _dates = sorted(first_stop_sub["session_id"].unique())
+            date_labels = [s.split("_")[1] for s in _dates]
             _ax.set_xticks(np.arange(len(_dates)))
-            _ax.set_xticklabels(date_labels, rotation=45, ha='right')
-            _ax.set_xlabel('Session')
-            _ax.set_ylabel('P(choice)')
+            _ax.set_xticklabels(date_labels, rotation=45, ha="right")
+            _ax.set_xlabel("Session")
+            _ax.set_ylabel("P(choice)")
             _ax.set_ylim(0, 1.05)
-            _ax.set_title(f'Subject {_animal}')
+            _ax.set_title(f"Subject {_animal}")
             _ax.legend(frameon=False, fontsize=8)
-        _fig.suptitle('P(choice) at 1st, 2nd, and 3rd trial of each block (session averages)')
+        _fig.suptitle(
+            "P(choice) at 1st, 2nd, and 3rd trial of each block (session averages)"
+        )
         _fig.tight_layout()
     plt.show()  # Use session dates from 1st stop for x-axis labels (most sessions should have it)
     return
@@ -287,112 +327,210 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
     from sklearn.linear_model import LogisticRegression
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
-    _rs = trials[(trials['site_label'] == 'RewardSite') & trials['block'].notna()].copy()
-    _rs = _rs.sort_values(['session_id', 'block', 'start_time'])
-    _grp = _rs.groupby(['session_id', 'block'], sort=False)
-    _rs['prev_odor_index'] = _grp['odor_index'].shift(1)
-    _rs['prev_has_choice'] = _grp['has_choice'].shift(1)
-    _rs['prev_has_reward'] = _grp['has_reward'].shift(1)
-    _rs = _rs.dropna(subset=['prev_odor_index', 'prev_has_choice', 'prev_has_reward'])
-    is_same = (_rs['odor_index'] == _rs['prev_odor_index']).to_numpy()
-    prev_choice = _rs['prev_has_choice'].astype(bool).to_numpy()
-    prev_rewarded = _rs['prev_has_reward'].astype(bool).to_numpy()
-    _rs['IsPrevChoice_SameOdor'] = np.where(is_same, np.where(prev_choice, 1.0, -1.0), 0.0)
-    _rs['IsPrevChoice_OtherOdor'] = np.where(~is_same, np.where(prev_choice, 1.0, -1.0), 0.0)
-    _rs['H_Same_Rew'] = (is_same & prev_rewarded).astype(float)
-    _rs['H_Same_NoRew'] = (is_same & ~prev_rewarded).astype(float)
-    _rs['H_Other_Rew'] = (~is_same & prev_rewarded).astype(float)
-    _rs['H_Other_NoRew'] = (~is_same & ~prev_rewarded).astype(float)
-    _rs['choice'] = _rs['has_choice'].astype(int)
-    PLOT_COEFS = ['IsPrevChoice_SameOdor', 'IsPrevChoice_OtherOdor', 'H_Same_Rew', 'H_Same_NoRew', 'H_Other_Rew', 'H_Other_NoRew']
+
+    _rs = trials[
+        (trials["site_label"] == "RewardSite") & trials["block"].notna()
+    ].copy()
+    _rs = _rs.sort_values(["session_id", "block", "start_time"])
+    _grp = _rs.groupby(["session_id", "block"], sort=False)
+    _rs["prev_odor_index"] = _grp["odor_index"].shift(1)
+    _rs["prev_has_choice"] = _grp["has_choice"].shift(1)
+    _rs["prev_has_reward"] = _grp["has_reward"].shift(1)
+    _rs = _rs.dropna(subset=["prev_odor_index", "prev_has_choice", "prev_has_reward"])
+    is_same = (_rs["odor_index"] == _rs["prev_odor_index"]).to_numpy()
+    prev_choice = _rs["prev_has_choice"].astype(bool).to_numpy()
+    prev_rewarded = _rs["prev_has_reward"].astype(bool).to_numpy()
+    _rs["IsPrevChoice_SameOdor"] = np.where(
+        is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
+    _rs["IsPrevChoice_OtherOdor"] = np.where(
+        ~is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
+    _rs["H_Same_Rew"] = (is_same & prev_rewarded).astype(float)
+    _rs["H_Same_NoRew"] = (is_same & ~prev_rewarded).astype(float)
+    _rs["H_Other_Rew"] = (~is_same & prev_rewarded).astype(float)
+    _rs["H_Other_NoRew"] = (~is_same & ~prev_rewarded).astype(float)
+    _rs["choice"] = _rs["has_choice"].astype(int)
+    PLOT_COEFS = [
+        "IsPrevChoice_SameOdor",
+        "IsPrevChoice_OtherOdor",
+        "H_Same_Rew",
+        "H_Same_NoRew",
+        "H_Other_Rew",
+        "H_Other_NoRew",
+    ]
     FEATURE_COLS = PLOT_COEFS
     records = []
-    for session_id, sdf in _rs.groupby('session_id'):
-        if len(sdf) < 10 or sdf['choice'].nunique() < 2:
+    for session_id, sdf in _rs.groupby("session_id"):
+        if len(sdf) < 10 or sdf["choice"].nunique() < 2:
             continue
         X = sdf[FEATURE_COLS].to_numpy(dtype=float)
-        y = sdf['choice'].to_numpy(dtype=int)
+        y = sdf["choice"].to_numpy(dtype=int)
         try:
-            clf = LogisticRegression(C=np.inf, solver='lbfgs', fit_intercept=False, max_iter=500)
+            clf = LogisticRegression(
+                C=np.inf, solver="lbfgs", fit_intercept=False, max_iter=500
+            )
             clf.fit(X, y)
             for name, val in zip(PLOT_COEFS, clf.coef_[0]):
-                records.append(dict(session_id=session_id, subject_id=sdf['subject_id'].iloc[0], coef=name, value=val))
+                records.append(
+                    dict(
+                        session_id=session_id,
+                        subject_id=sdf["subject_id"].iloc[0],
+                        coef=name,
+                        value=val,
+                    )
+                )
         except Exception as e:
-            print(f'Session {session_id} failed: {e}')
+            print(f"Session {session_id} failed: {e}")
     coefs = pd.DataFrame(records)
-    SAME_COLOR = '#e07b39'
-    OTHER_COLOR = '#4f8fc0'
-    NEUTRAL_COLOR = 'gray'
+    SAME_COLOR = "#e07b39"
+    OTHER_COLOR = "#4f8fc0"
+    NEUTRAL_COLOR = "gray"
 
     def _coef_color(name):
-        if name.startswith('H_Same'):
+        if name.startswith("H_Same"):
             return SAME_COLOR
-        if name.startswith('H_Other'):
+        if name.startswith("H_Other"):
             return OTHER_COLOR
-        if 'Same' in name:
+        if "Same" in name:
             return SAME_COLOR
-        if 'Other' in name:
+        if "Other" in name:
             return OTHER_COLOR
         return NEUTRAL_COLOR
-    TICK_LABELS = ['IsPrevChoice\n[same]', 'IsPrevChoice\n[other]', 'Same × Rew', 'Same × NoRew', 'Other × Rew', 'Other × NoRew']
-    subjects = sorted(coefs['subject_id'].unique())
+
+    TICK_LABELS = [
+        "IsPrevChoice\n[same]",
+        "IsPrevChoice\n[other]",
+        "Same × Rew",
+        "Same × NoRew",
+        "Other × Rew",
+        "Other × NoRew",
+    ]
+    subjects = sorted(coefs["subject_id"].unique())
     x_pos = np.arange(len(PLOT_COEFS))
     rng = np.random.default_rng(0)
-    PAIR_GROUPS = [(['IsPrevChoice_SameOdor', 'IsPrevChoice_OtherOdor'], '#f5f5f5'), (['H_Same_Rew', 'H_Same_NoRew'], '#fff3eb'), (['H_Other_Rew', 'H_Other_NoRew'], '#ebf3ff')]
+    PAIR_GROUPS = [
+        (["IsPrevChoice_SameOdor", "IsPrevChoice_OtherOdor"], "#f5f5f5"),
+        (["H_Same_Rew", "H_Same_NoRew"], "#fff3eb"),
+        (["H_Other_Rew", "H_Other_NoRew"], "#ebf3ff"),
+    ]
     N_BOOTSTRAP = 2000
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(2, len(subjects), figsize=(8 * len(subjects), 10), sharey='row', squeeze=False)
+        _fig, _axes = plt.subplots(
+            2,
+            len(subjects),
+            figsize=(8 * len(subjects), 10),
+            sharey="row",
+            squeeze=False,
+        )
         for col, _subject in enumerate(subjects):
             _ax = _axes[0][col]
             for group_members, bg in PAIR_GROUPS:
                 idxs = [PLOT_COEFS.index(_m) for _m in group_members]
                 _ax.axvspan(min(idxs) - 0.4, max(idxs) + 0.4, color=bg, zorder=0)
-            _sub = coefs[coefs['subject_id'] == _subject]
-            _sessions = sorted(_sub['session_id'].unique())
+            _sub = coefs[coefs["subject_id"] == _subject]
+            _sessions = sorted(_sub["session_id"].unique())
             _n = len(_sessions)
-            cmap = plt.get_cmap('viridis')
+            cmap = plt.get_cmap("viridis")
             norm = Normalize(vmin=0, vmax=max(_n - 1, 1))
             for day, session_id in enumerate(_sessions):
-                sdata = _sub[_sub['session_id'] == session_id].set_index('coef')['value']
+                sdata = _sub[_sub["session_id"] == session_id].set_index("coef")[
+                    "value"
+                ]
                 _vals = [sdata.get(c, np.nan) for c in PLOT_COEFS]
                 jx = x_pos + rng.uniform(-0.15, 0.15, len(x_pos))
-                _ax.scatter(jx, _vals, color=cmap(norm(day)), s=40, zorder=3, alpha=0.85)
-            means = _sub.groupby('coef')['value'].mean().reindex(PLOT_COEFS)
-            sems = _sub.groupby('coef')['value'].sem().reindex(PLOT_COEFS)
+                _ax.scatter(
+                    jx, _vals, color=cmap(norm(day)), s=40, zorder=3, alpha=0.85
+                )
+            means = _sub.groupby("coef")["value"].mean().reindex(PLOT_COEFS)
+            sems = _sub.groupby("coef")["value"].sem().reindex(PLOT_COEFS)
             for _xi, coef in enumerate(PLOT_COEFS):
-                _ax.errorbar(_xi, means[coef], yerr=sems[coef], fmt='o', color=_coef_color(coef), ms=8, lw=2.5, capsize=5, zorder=5)
-            _ax.axhline(0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+                _ax.errorbar(
+                    _xi,
+                    means[coef],
+                    yerr=sems[coef],
+                    fmt="o",
+                    color=_coef_color(coef),
+                    ms=8,
+                    lw=2.5,
+                    capsize=5,
+                    zorder=5,
+                )
+            _ax.axhline(0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
             _ax.set_xticks(x_pos)
-            _ax.set_xticklabels(TICK_LABELS, rotation=30, ha='right', fontsize=9)
-            _ax.set_title(f'Subject {_subject}')
-            _ax.set_xlabel('Regressor')
+            _ax.set_xticklabels(TICK_LABELS, rotation=30, ha="right", fontsize=9)
+            _ax.set_title(f"Subject {_subject}")
+            _ax.set_xlabel("Regressor")
             cb = _fig.colorbar(ScalarMappable(norm=norm, cmap=cmap), ax=_ax)
-            cb.set_label('Session (day)')
+            cb.set_label("Session (day)")
             cb.set_ticks([0, max(_n - 1, 1)])
-            cb.set_ticklabels(['first', 'last'])
+            cb.set_ticklabels(["first", "last"])
             ax2 = _axes[1][col]
             for group_members, bg in PAIR_GROUPS:
                 idxs = [PLOT_COEFS.index(_m) for _m in group_members]
                 ax2.axvspan(min(idxs) - 0.4, max(idxs) + 0.4, color=bg, zorder=0)
-            session_list = sorted(_sub['session_id'].unique())
-            coef_matrix = np.array([[_sub[_sub['session_id'] == sid].set_index('coef')['value'].reindex(PLOT_COEFS).values for sid in session_list]]).squeeze(0)
+            session_list = sorted(_sub["session_id"].unique())
+            coef_matrix = np.array(
+                [
+                    [
+                        _sub[_sub["session_id"] == sid]
+                        .set_index("coef")["value"]
+                        .reindex(PLOT_COEFS)
+                        .values
+                        for sid in session_list
+                    ]
+                ]
+            ).squeeze(0)
             observed_mean = np.nanmean(coef_matrix, axis=0)
             boot_rng = np.random.default_rng(42)
-            boot_means = np.array([np.nanmean(coef_matrix[boot_rng.integers(0, len(session_list), size=len(session_list))], axis=0) for _ in range(N_BOOTSTRAP)])
+            boot_means = np.array(
+                [
+                    np.nanmean(
+                        coef_matrix[
+                            boot_rng.integers(
+                                0, len(session_list), size=len(session_list)
+                            )
+                        ],
+                        axis=0,
+                    )
+                    for _ in range(N_BOOTSTRAP)
+                ]
+            )
             ci_lo = np.nanpercentile(boot_means, 2.5, axis=0)
             ci_hi = np.nanpercentile(boot_means, 97.5, axis=0)
             for _xi, coef in enumerate(PLOT_COEFS):
                 _color = _coef_color(coef)
-                ax2.bar(_xi, observed_mean[_xi], color=_color, alpha=0.75, width=0.6, zorder=2)
-                ax2.errorbar(_xi, observed_mean[_xi], yerr=[[observed_mean[_xi] - ci_lo[_xi]], [ci_hi[_xi] - observed_mean[_xi]]], fmt='none', color='black', capsize=5, lw=1.5, zorder=3)
-            ax2.axhline(0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+                ax2.bar(
+                    _xi,
+                    observed_mean[_xi],
+                    color=_color,
+                    alpha=0.75,
+                    width=0.6,
+                    zorder=2,
+                )
+                ax2.errorbar(
+                    _xi,
+                    observed_mean[_xi],
+                    yerr=[
+                        [observed_mean[_xi] - ci_lo[_xi]],
+                        [ci_hi[_xi] - observed_mean[_xi]],
+                    ],
+                    fmt="none",
+                    color="black",
+                    capsize=5,
+                    lw=1.5,
+                    zorder=3,
+                )
+            ax2.axhline(0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
             ax2.set_xticks(x_pos)
-            ax2.set_xticklabels(TICK_LABELS, rotation=30, ha='right', fontsize=9)
-            ax2.set_title(f'Subject {_subject} — bootstrap mean')
-            ax2.set_xlabel('Regressor')
-        _axes[0][0].set_ylabel('GLM coefficient (per session)')
-        _axes[1][0].set_ylabel('GLM coefficient (bootstrap mean ± 95% CI)')
-        _fig.suptitle('Logistic GLM: P(choice) — within-block, 1-trial history\nReward encoding: one-hot (is_same × is_prev_rewarded), no intercept')
+            ax2.set_xticklabels(TICK_LABELS, rotation=30, ha="right", fontsize=9)
+            ax2.set_title(f"Subject {_subject} — bootstrap mean")
+            ax2.set_xlabel("Regressor")
+        _axes[0][0].set_ylabel("GLM coefficient (per session)")
+        _axes[1][0].set_ylabel("GLM coefficient (bootstrap mean ± 95% CI)")
+        _fig.suptitle(
+            "Logistic GLM: P(choice) — within-block, 1-trial history\nReward encoding: one-hot (is_same × is_prev_rewarded), no intercept"
+        )
         _fig.tight_layout()
     plt.show()
     return coefs, subjects
@@ -402,26 +540,44 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
 def history_glm_reward_cells(a_lot_of_style, coefs, np, plt, subjects):
     # ── One-hot reward cells timecourse across sessions ───────────────────────────
     # 4 distinct colors so solid/dashed ambiguity is avoided entirely
-    REWARD_CELLS = {'H_Same_Rew': {'label': 'Same × Rew', 'color': '#e07b39', 'marker': 'o'}, 'H_Same_NoRew': {'label': 'Same × NoRew', 'color': '#f5c18a', 'marker': 'o'}, 'H_Other_Rew': {'label': 'Other × Rew', 'color': '#2a6496', 'marker': 's'}, 'H_Other_NoRew': {'label': 'Other × NoRew', 'color': '#9ecae1', 'marker': 's'}}
+    REWARD_CELLS = {
+        "H_Same_Rew": {"label": "Same × Rew", "color": "#e07b39", "marker": "o"},
+        "H_Same_NoRew": {"label": "Same × NoRew", "color": "#f5c18a", "marker": "o"},
+        "H_Other_Rew": {"label": "Other × Rew", "color": "#2a6496", "marker": "s"},
+        "H_Other_NoRew": {"label": "Other × NoRew", "color": "#9ecae1", "marker": "s"},
+    }
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(1, len(subjects), figsize=(6 * len(subjects), 4), sharey=True, squeeze=False)
+        _fig, _axes = plt.subplots(
+            1, len(subjects), figsize=(6 * len(subjects), 4), sharey=True, squeeze=False
+        )
         for _ax, _subject in zip(_axes[0], subjects):
-            _sub = coefs[coefs['subject_id'] == _subject]
-            _sessions = sorted(_sub['session_id'].unique())
+            _sub = coefs[coefs["subject_id"] == _subject]
+            _sessions = sorted(_sub["session_id"].unique())
             _x = np.arange(len(_sessions))
-            _dates = [s.split('_')[1] for s in _sessions]
+            _dates = [s.split("_")[1] for s in _sessions]
             for term, _style in REWARD_CELLS.items():
-                rows = _sub[_sub['coef'] == term].set_index('session_id')
-                _vals = [rows.loc[sid, 'value'] if sid in rows.index else np.nan for sid in _sessions]
-                _ax.plot(_x, _vals, marker=_style['marker'], color=_style['color'], linewidth=2, markersize=7, label=_style['label'])
-            _ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+                rows = _sub[_sub["coef"] == term].set_index("session_id")
+                _vals = [
+                    rows.loc[sid, "value"] if sid in rows.index else np.nan
+                    for sid in _sessions
+                ]
+                _ax.plot(
+                    _x,
+                    _vals,
+                    marker=_style["marker"],
+                    color=_style["color"],
+                    linewidth=2,
+                    markersize=7,
+                    label=_style["label"],
+                )
+            _ax.axhline(0, color="gray", linestyle="--", linewidth=0.8, alpha=0.5)
             _ax.set_xticks(_x)
-            _ax.set_xticklabels(_dates, rotation=45, ha='right', fontsize=8)
-            _ax.set_xlabel('Session')
-            _ax.set_title(f'Subject {_subject}')
+            _ax.set_xticklabels(_dates, rotation=45, ha="right", fontsize=8)
+            _ax.set_xlabel("Session")
+            _ax.set_title(f"Subject {_subject}")
             _ax.legend(frameon=False, fontsize=8)
-        _axes[0][0].set_ylabel('GLM coefficient')
-        _fig.suptitle('One-hot reward cells timecourse')
+        _axes[0][0].set_ylabel("GLM coefficient")
+        _fig.suptitle("One-hot reward cells timecourse")
         _fig.tight_layout()
     plt.show()
     return
@@ -429,9 +585,15 @@ def history_glm_reward_cells(a_lot_of_style, coefs, np, plt, subjects):
 
 @app.cell
 def window_controls(mo):
-    window_blocks = mo.ui.slider(2, 100, 1, value=100, label='Window size (blocks)', show_value=True)
-    skip_blocks = mo.ui.slider(1, 100, 1, value=20, label='Skip / stride (blocks)', show_value=True)
-    min_blocks_window = mo.ui.slider(1, 20, 1, value=3, label='Min blocks per counterfactual cell', show_value=True)
+    window_blocks = mo.ui.slider(
+        2, 100, 1, value=100, label="Window size (blocks)", show_value=True
+    )
+    skip_blocks = mo.ui.slider(
+        1, 100, 1, value=20, label="Skip / stride (blocks)", show_value=True
+    )
+    min_blocks_window = mo.ui.slider(
+        1, 20, 1, value=3, label="Min blocks per counterfactual cell", show_value=True
+    )
     mo.vstack([window_blocks, skip_blocks, min_blocks_window])
     return min_blocks_window, skip_blocks, window_blocks
 
@@ -446,11 +608,24 @@ def history_glm_per_window(skip_blocks, trials, window_blocks):
     # for a block boundary. Windows are cut over the blocks `trials` still holds,
     # i.e. the ones that survive the degenerate-block filter the session fit uses.
     glm_features = history_glm_features(trials)
-    glm_windows = expand_to_block_windows(glm_features, window_blocks.value, skip_blocks.value)
-    coefs_window = fit_history_glm(glm_windows, unit_col=['subject_id', 'window'])
-    window_bounds = glm_windows.drop_duplicates('window').set_index('window')[['window_start', 'window_end']].sort_index()
-    print(f'{window_blocks.value}-block windows, stride {skip_blocks.value} -> {len(window_bounds)} window positions')
-    print(coefs_window.groupby('subject_id').agg(n_windows=('window', 'nunique'), trials_per_window=('n_trials', 'mean')).round(1).to_string())
+    glm_windows = expand_to_block_windows(
+        glm_features, window_blocks.value, skip_blocks.value
+    )
+    coefs_window = fit_history_glm(glm_windows, unit_col=["subject_id", "window"])
+    window_bounds = (
+        glm_windows.drop_duplicates("window")
+        .set_index("window")[["window_start", "window_end"]]
+        .sort_index()
+    )
+    print(
+        f"{window_blocks.value}-block windows, stride {skip_blocks.value} -> {len(window_bounds)} window positions"
+    )
+    print(
+        coefs_window.groupby("subject_id")
+        .agg(n_windows=("window", "nunique"), trials_per_window=("n_trials", "mean"))
+        .round(1)
+        .to_string()
+    )
     return coefs_window, window_bounds
 
 
@@ -465,27 +640,54 @@ def history_glm_reward_cells_by_window(
 ):
     # Per-window version of the reward-cell timecourse above: x is the window
     # number (labelled with its pooled block range) rather than the session date.
-    REWARD_CELLS_WINDOW = {'H_Same_Rew': {'label': 'Same × Rew', 'color': '#e07b39', 'marker': 'o'}, 'H_Same_NoRew': {'label': 'Same × NoRew', 'color': '#f5c18a', 'marker': 'o'}, 'H_Other_Rew': {'label': 'Other × Rew', 'color': '#2a6496', 'marker': 's'}, 'H_Other_NoRew': {'label': 'Other × NoRew', 'color': '#9ecae1', 'marker': 's'}}
-    subjects_window = sorted(coefs_window['subject_id'].unique())
+    REWARD_CELLS_WINDOW = {
+        "H_Same_Rew": {"label": "Same × Rew", "color": "#e07b39", "marker": "o"},
+        "H_Same_NoRew": {"label": "Same × NoRew", "color": "#f5c18a", "marker": "o"},
+        "H_Other_Rew": {"label": "Other × Rew", "color": "#2a6496", "marker": "s"},
+        "H_Other_NoRew": {"label": "Other × NoRew", "color": "#9ecae1", "marker": "s"},
+    }
+    subjects_window = sorted(coefs_window["subject_id"].unique())
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(1, len(subjects_window), figsize=(6 * len(subjects_window), 4), sharey=True, squeeze=False)
+        _fig, _axes = plt.subplots(
+            1,
+            len(subjects_window),
+            figsize=(6 * len(subjects_window), 4),
+            sharey=True,
+            squeeze=False,
+        )
         for _ax, _subject in zip(_axes[0], subjects_window):
-            _sub = coefs_window[coefs_window['subject_id'] == _subject]
-            _windows = sorted(_sub['window'].unique())
+            _sub = coefs_window[coefs_window["subject_id"] == _subject]
+            _windows = sorted(_sub["window"].unique())
             _x = np.arange(len(_windows))
-            _labels = [f"{int(window_bounds.loc[w, 'window_start'])}-{int(window_bounds.loc[w, 'window_end'])}" for w in _windows]
+            _labels = [
+                f"{int(window_bounds.loc[w, 'window_start'])}-{int(window_bounds.loc[w, 'window_end'])}"
+                for w in _windows
+            ]
             for _term, _cell_style in REWARD_CELLS_WINDOW.items():
-                _rows = _sub[_sub['coef'] == _term].set_index('window')
-                _vals = [_rows.loc[w, 'value'] if w in _rows.index else np.nan for w in _windows]
-                _ax.plot(_x, _vals, marker=_cell_style['marker'], color=_cell_style['color'], linewidth=2, markersize=7, label=_cell_style['label'])
-            _ax.axhline(0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+                _rows = _sub[_sub["coef"] == _term].set_index("window")
+                _vals = [
+                    _rows.loc[w, "value"] if w in _rows.index else np.nan
+                    for w in _windows
+                ]
+                _ax.plot(
+                    _x,
+                    _vals,
+                    marker=_cell_style["marker"],
+                    color=_cell_style["color"],
+                    linewidth=2,
+                    markersize=7,
+                    label=_cell_style["label"],
+                )
+            _ax.axhline(0, color="gray", linestyle="--", linewidth=0.8, alpha=0.5)
             _ax.set_xticks(_x)
-            _ax.set_xticklabels(_labels, rotation=45, ha='right', fontsize=7)
-            _ax.set_xlabel('Block window (pooled block range)')
-            _ax.set_title(f'Subject {_subject}')
+            _ax.set_xticklabels(_labels, rotation=45, ha="right", fontsize=7)
+            _ax.set_xlabel("Block window (pooled block range)")
+            _ax.set_title(f"Subject {_subject}")
             _ax.legend(frameon=False, fontsize=8)
-        _axes[0][0].set_ylabel('GLM coefficient')
-        _fig.suptitle(f'One-hot reward cells timecourse over {window_blocks.value}-block windows (sessions pooled per animal)')
+        _axes[0][0].set_ylabel("GLM coefficient")
+        _fig.suptitle(
+            f"One-hot reward cells timecourse over {window_blocks.value}-block windows (sessions pooled per animal)"
+        )
         _fig.tight_layout()
     plt.show()
     return
@@ -493,46 +695,119 @@ def history_glm_reward_cells_by_window(
 
 @app.cell
 def bias_by_odor_identity(a_lot_of_style, pd, plt, trials):
-    _rs = trials[(trials['site_label'] == 'RewardSite') & trials['block'].notna()].copy()
-    odor_block = _rs.groupby(['subject_id', 'session_id', 'block', 'odor_index']).agg(p_stop=('has_choice', 'mean'), n_trials=('has_choice', 'count'), is_rewarded_odor=('is_rewarded_odor', 'first')).reset_index()
-    odor_block = odor_block.sort_values(['subject_id', 'odor_index', 'session_id', 'block'])
+    _rs = trials[
+        (trials["site_label"] == "RewardSite") & trials["block"].notna()
+    ].copy()
+    odor_block = (
+        _rs.groupby(["subject_id", "session_id", "block", "odor_index"])
+        .agg(
+            p_stop=("has_choice", "mean"),
+            n_trials=("has_choice", "count"),
+            is_rewarded_odor=("is_rewarded_odor", "first"),
+        )
+        .reset_index()
+    )
+    odor_block = odor_block.sort_values(
+        ["subject_id", "odor_index", "session_id", "block"]
+    )
     pair_records = []
-    for (_subject, odor), _grp in odor_block.groupby(['subject_id', 'odor_index']):
+    for (_subject, odor), _grp in odor_block.groupby(["subject_id", "odor_index"]):
         _grp = _grp.reset_index(drop=True)
         for i in range(len(_grp) - 1):
             prev = _grp.iloc[i]
             curr = _grp.iloc[i + 1]
-            pair_records.append({'subject_id': _subject, 'odor_index': int(odor), 'prev_rewarded': bool(prev['is_rewarded_odor']), 'curr_rewarded': bool(curr['is_rewarded_odor']), 'p_stop_curr': curr['p_stop'], 'n_trials_curr': int(curr['n_trials'])})
+            pair_records.append(
+                {
+                    "subject_id": _subject,
+                    "odor_index": int(odor),
+                    "prev_rewarded": bool(prev["is_rewarded_odor"]),
+                    "curr_rewarded": bool(curr["is_rewarded_odor"]),
+                    "p_stop_curr": curr["p_stop"],
+                    "n_trials_curr": int(curr["n_trials"]),
+                }
+            )
     pairs_df = pd.DataFrame(pair_records)
-    CONDITIONS = [(True, True, 'Prev Rew\n-> Curr Rew', '#c0392b'), (True, False, 'Prev Rew\n-> Curr NoRew', '#e07b39'), (False, True, 'Prev NoRew\n-> Curr Rew', '#1a5276'), (False, False, 'Prev NoRew\n-> Curr NoRew', '#4f8fc0')]
-    subjects_1 = sorted(pairs_df['subject_id'].unique())
+    CONDITIONS = [
+        (True, True, "Prev Rew\n-> Curr Rew", "#c0392b"),
+        (True, False, "Prev Rew\n-> Curr NoRew", "#e07b39"),
+        (False, True, "Prev NoRew\n-> Curr Rew", "#1a5276"),
+        (False, False, "Prev NoRew\n-> Curr NoRew", "#4f8fc0"),
+    ]
+    subjects_1 = sorted(pairs_df["subject_id"].unique())
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(1, len(subjects_1), figsize=(5 * len(subjects_1), 5), sharey=True, squeeze=False)
-        _fig.suptitle('P(stop) at next odor encounter — 4 conditions\n(prev block rewarded / not) x (curr block rewarded / not)', fontsize=10)
+        _fig, _axes = plt.subplots(
+            1,
+            len(subjects_1),
+            figsize=(5 * len(subjects_1), 5),
+            sharey=True,
+            squeeze=False,
+        )
+        _fig.suptitle(
+            "P(stop) at next odor encounter — 4 conditions\n(prev block rewarded / not) x (curr block rewarded / not)",
+            fontsize=10,
+        )
         for ai, _subject in enumerate(subjects_1):
             _ax = _axes[0][ai]
-            _sub = pairs_df[pairs_df['subject_id'] == _subject]
-            _ax.axvspan(-0.5, 1.5, color='#fff0eb', zorder=0)
-            _ax.axvspan(1.5, 3.5, color='#eaf3fb', zorder=0)
+            _sub = pairs_df[pairs_df["subject_id"] == _subject]
+            _ax.axvspan(-0.5, 1.5, color="#fff0eb", zorder=0)
+            _ax.axvspan(1.5, 3.5, color="#eaf3fb", zorder=0)
             for _xi, (prev_rew, curr_rew, _label, _color) in enumerate(CONDITIONS):
-                _grp = _sub[(_sub['prev_rewarded'] == prev_rew) & (_sub['curr_rewarded'] == curr_rew)]['p_stop_curr']
+                _grp = _sub[
+                    (_sub["prev_rewarded"] == prev_rew)
+                    & (_sub["curr_rewarded"] == curr_rew)
+                ]["p_stop_curr"]
                 _n = len(_grp)
-                _m = _grp.mean() if _n > 0 else float('nan')
+                _m = _grp.mean() if _n > 0 else float("nan")
                 se = _grp.sem() if _n > 1 else 0.0
                 _ax.bar(_xi, _m, color=_color, alpha=0.85, width=0.65, zorder=2)
                 if _m == _m:
-                    _ax.errorbar(_xi, _m, yerr=se, fmt='none', color='black', capsize=5, lw=1.5, zorder=3)
-                    _ax.text(_xi, min(_m + se + 0.04, 1.18), f'n={_n}', ha='center', va='bottom', fontsize=7, zorder=4)
-            _ax.axvline(1.5, color='black', lw=1.0, alpha=0.3, zorder=1)
-            _ax.axhline(0.5, color='gray', linestyle='--', lw=0.8, alpha=0.5)
+                    _ax.errorbar(
+                        _xi,
+                        _m,
+                        yerr=se,
+                        fmt="none",
+                        color="black",
+                        capsize=5,
+                        lw=1.5,
+                        zorder=3,
+                    )
+                    _ax.text(
+                        _xi,
+                        min(_m + se + 0.04, 1.18),
+                        f"n={_n}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=7,
+                        zorder=4,
+                    )
+            _ax.axvline(1.5, color="black", lw=1.0, alpha=0.3, zorder=1)
+            _ax.axhline(0.5, color="gray", linestyle="--", lw=0.8, alpha=0.5)
             _ax.set_xticks(range(len(CONDITIONS)))
             _ax.set_xticklabels([c[2] for c in CONDITIONS], fontsize=8)
             _ax.set_ylim(0, 1.35)
-            _ax.set_title(f'Subject {_subject}', fontsize=10)
+            _ax.set_title(f"Subject {_subject}", fontsize=10)
             if ai == 0:
-                _ax.set_ylabel('P(stop) in next block encounter')
-            _ax.text(0.5, 1.28, 'Prev: Rewarded', ha='center', va='top', fontsize=7.5, color='#8b0000', transform=_ax.get_xaxis_transform())
-            _ax.text(2.5, 1.28, 'Prev: Not Rewarded', ha='center', va='top', fontsize=7.5, color='#1a5276', transform=_ax.get_xaxis_transform())
+                _ax.set_ylabel("P(stop) in next block encounter")
+            _ax.text(
+                0.5,
+                1.28,
+                "Prev: Rewarded",
+                ha="center",
+                va="top",
+                fontsize=7.5,
+                color="#8b0000",
+                transform=_ax.get_xaxis_transform(),
+            )
+            _ax.text(
+                2.5,
+                1.28,
+                "Prev: Not Rewarded",
+                ha="center",
+                va="top",
+                fontsize=7.5,
+                color="#1a5276",
+                transform=_ax.get_xaxis_transform(),
+            )
         _fig.tight_layout()
         plt.show()
     return
@@ -635,7 +910,7 @@ def counterfactual_heatmap_per_animal(
     # 1 (red) in the "next NOREW" columns, so perfect behaviour reads
     # blue / red / blue / red.
     with a_lot_of_style():
-        _fig, _ = plot_counterfactual_heatmap(trials_all, value='p_leave', matrix=cf)
+        _fig, _ = plot_counterfactual_heatmap(trials_all, value="p_leave", matrix=cf)
     plt.show()
     return
 
@@ -644,29 +919,52 @@ def counterfactual_heatmap_per_animal(
 def counterfactual_trends_per_animal(a_lot_of_style, cf, np, plt):
     from matplotlib.ticker import MaxNLocator
     from helpers import COUNTERFACTUAL_CELLS, counterfactual_session_trends
-    CF_COLORS = ['#c0392b', '#e07b39', '#1a5276', '#4f8fc0']
-    subjects_2 = sorted(cf['subject_id'].unique())
-    trends = counterfactual_session_trends(cf, value='accuracy')
+
+    CF_COLORS = ["#c0392b", "#e07b39", "#1a5276", "#4f8fc0"]
+    subjects_2 = sorted(cf["subject_id"].unique())
+    trends = counterfactual_session_trends(cf, value="accuracy")
     print(trends.round(4).to_string(index=False))
     with a_lot_of_style():
-        _fig, _axes = plt.subplots(1, len(subjects_2), figsize=(4.2 * len(subjects_2), 4), sharey=True, squeeze=False)
+        _fig, _axes = plt.subplots(
+            1,
+            len(subjects_2),
+            figsize=(4.2 * len(subjects_2), 4),
+            sharey=True,
+            squeeze=False,
+        )
         for _ax, _subject in zip(_axes[0], subjects_2):
-            _sub = cf[cf['subject_id'] == _subject]
+            _sub = cf[cf["subject_id"] == _subject]
             for (fsr, nr, _label, _), _color in zip(COUNTERFACTUAL_CELLS, CF_COLORS):
-                g = _sub[(_sub['first_stop_rewarded'] == fsr) & (_sub['next_rewarded'] == nr)].dropna(subset=['accuracy']).sort_values('session_index')
-                _ax.plot(g['session_index'], g['accuracy'], marker='o', ms=4, color=_color, label=_label.replace('\n', ' '))
+                g = (
+                    _sub[
+                        (_sub["first_stop_rewarded"] == fsr)
+                        & (_sub["next_rewarded"] == nr)
+                    ]
+                    .dropna(subset=["accuracy"])
+                    .sort_values("session_index")
+                )
+                _ax.plot(
+                    g["session_index"],
+                    g["accuracy"],
+                    marker="o",
+                    ms=4,
+                    color=_color,
+                    label=_label.replace("\n", " "),
+                )
                 if len(g) >= 3:
-                    _x = g['session_index'].to_numpy(dtype=float)
-                    _m, b = np.polyfit(_x, g['accuracy'].to_numpy(dtype=float), 1)
-                    _ax.plot(_x, _m * _x + b, color=_color, ls='--', lw=1.2, alpha=0.7)
-            _ax.axhline(0.5, color='gray', ls=':', lw=1)
+                    _x = g["session_index"].to_numpy(dtype=float)
+                    _m, b = np.polyfit(_x, g["accuracy"].to_numpy(dtype=float), 1)
+                    _ax.plot(_x, _m * _x + b, color=_color, ls="--", lw=1.2, alpha=0.7)
+            _ax.axhline(0.5, color="gray", ls=":", lw=1)
             _ax.set_ylim(0, 1.05)
             _ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-            _ax.set_xlabel('Session index')
-            _ax.set_title(f'Subject {_subject}', fontsize=10)
-        _axes[0][0].set_ylabel('accuracy (higher = better)')
-        _axes[0][-1].legend(frameon=False, fontsize=7, loc='lower right')
-        _fig.suptitle('Counterfactual accuracy across sessions (dashed = OLS fit)', fontsize=11)
+            _ax.set_xlabel("Session index")
+            _ax.set_title(f"Subject {_subject}", fontsize=10)
+        _axes[0][0].set_ylabel("accuracy (higher = better)")
+        _axes[0][-1].legend(frameon=False, fontsize=7, loc="lower right")
+        _fig.suptitle(
+            "Counterfactual accuracy across sessions (dashed = OLS fit)", fontsize=11
+        )
         _fig.tight_layout()
     plt.show()
     return
@@ -681,10 +979,21 @@ def counterfactual_cohort_by_session(a_lot_of_style, cf, plt):
     # columns are thin; the animal count runs along the top and the shaded region
     # marks where fewer than half the cohort remains.
     from helpers import plot_counterfactual_cohort_average
+
     with a_lot_of_style():
-        _fig, cf_cohort = plot_counterfactual_cohort_average(cf, value='p_leave', min_animals=1)
+        _fig, cf_cohort = plot_counterfactual_cohort_average(
+            cf, value="p_leave", min_animals=1
+        )
     plt.show()
-    print(cf_cohort.pivot_table(index='session_index', columns=['first_stop_rewarded', 'next_rewarded'], values=['mean', 'n_animals']).round(3).to_string())
+    print(
+        cf_cohort.pivot_table(
+            index="session_index",
+            columns=["first_stop_rewarded", "next_rewarded"],
+            values=["mean", "n_animals"],
+        )
+        .round(3)
+        .to_string()
+    )
     return
 
 
@@ -700,22 +1009,41 @@ def counterfactual_cohort_by_window(
     from helpers import counterfactual_window_matrix
     from helpers import plot_counterfactual_cohort_average as plot_cf_cohort
 
-    cf_window = counterfactual_window_matrix(trials, window_blocks.value, skip_blocks.value, min_blocks=min_blocks_window.value)
+    cf_window = counterfactual_window_matrix(
+        trials,
+        window_blocks.value,
+        skip_blocks.value,
+        min_blocks=min_blocks_window.value,
+    )
     with a_lot_of_style():
         _fig, cf_cohort_window = plot_cf_cohort(
             cf_window,
-            value='p_leave',
+            value="p_leave",
             min_animals=1,
-            x_label=f'Block-window number ({window_blocks.value} blocks, stride {skip_blocks.value}; aligned across mice)',
-            title=f'Counterfactual learning, averaged across mice at the same {window_blocks.value}-block window\n(sessions pooled per animal; error bars = SEM across animals; n falls off as animals run out of blocks)',
+            x_label=f"Block-window number ({window_blocks.value} blocks, stride {skip_blocks.value}; aligned across mice)",
+            title=f"Counterfactual learning, averaged across mice at the same {window_blocks.value}-block window\n(sessions pooled per animal; error bars = SEM across animals; n falls off as animals run out of blocks)",
         )
     plt.show()
-    _have = cf_window.groupby('session_index')['subject_id'].nunique()
-    _contributing = cf_cohort_window.groupby('session_index')['n_animals'].max().reindex(_have.index, fill_value=0)
+    _have = cf_window.groupby("session_index")["subject_id"].nunique()
+    _contributing = (
+        cf_cohort_window.groupby("session_index")["n_animals"]
+        .max()
+        .reindex(_have.index, fill_value=0)
+    )
     _short = (_have - _contributing).pipe(lambda s: s[s > 0])
-    print(f'{len(_short)} of {len(_have)} windows lose an animal to min_blocks={min_blocks_window.value} (window: animals lost)')
-    print(_short.to_string() if len(_short) else '  none')
-    print(cf_cohort_window.pivot_table(index='session_index', columns=['first_stop_rewarded', 'next_rewarded'], values=['mean', 'n_animals']).round(3).to_string())
+    print(
+        f"{len(_short)} of {len(_have)} windows lose an animal to min_blocks={min_blocks_window.value} (window: animals lost)"
+    )
+    print(_short.to_string() if len(_short) else "  none")
+    print(
+        cf_cohort_window.pivot_table(
+            index="session_index",
+            columns=["first_stop_rewarded", "next_rewarded"],
+            values=["mean", "n_animals"],
+        )
+        .round(3)
+        .to_string()
+    )
     return
 
 

@@ -33,8 +33,10 @@ def subject_id_for(session_ids):
     if isinstance(session_ids, str):
         return SESSION_SUBJECT_OVERRIDES.get(session_ids, session_ids.split("_")[0])
     s = pd.Series(session_ids, dtype="object").astype(str)
-    return s.str.split("_").str[0].mask(
-        s.isin(SESSION_SUBJECT_OVERRIDES), s.map(SESSION_SUBJECT_OVERRIDES)
+    return (
+        s.str.split("_")
+        .str[0]
+        .mask(s.isin(SESSION_SUBJECT_OVERRIDES), s.map(SESSION_SUBJECT_OVERRIDES))
     )
 
 
@@ -152,7 +154,11 @@ def _appearance_table(
 
 
 def plot_choice_by_block_position(
-    trials: pd.DataFrame, ax=None, legend: bool = True, from_first_stop: bool = False
+    trials: pd.DataFrame,
+    ax=None,
+    legend: bool = True,
+    from_first_stop: bool = False,
+    colors: dict | None = None,
 ):
     """Plot ``P(has_choice)`` against within-block appearance index, per odor.
 
@@ -178,7 +184,7 @@ def plot_choice_by_block_position(
     if ax is None:
         _, ax = plt.subplots(figsize=(5, 4))
 
-    colors = {True: "tab:orange", False: "tab:blue"}
+    colors = colors if colors is not None else {True: "tab:orange", False: "tab:blue"}
     for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
         stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
         label = "Rewarded odor" if is_rewarded else "Non-rewarded odor"
@@ -201,6 +207,76 @@ def plot_choice_by_block_position(
     if legend:
         ax.legend()
     return ax
+
+
+def _plot_sessions_on_ax(
+    sub: pd.DataFrame,
+    ax,
+    colors: dict,
+    from_first_stop: bool = True,
+) -> None:
+    """Draw all sessions for one animal side-by-side on *ax*, separated by vertical lines."""
+    N_APP = 5
+    GAP = 2
+    STRIDE = N_APP + GAP
+    sessions = sorted(sub["session_id"].unique())
+    seen = {True: False, False: False}
+
+    for s_idx, session_id in enumerate(sessions):
+        rs = _appearance_table(
+            sub[sub["session_id"] == session_id], from_first_stop=from_first_stop
+        )
+        x_offset = s_idx * STRIDE
+
+        for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
+            stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
+            if stats.empty:
+                continue
+            label = (
+                ("Rewarded odor" if is_rewarded else "Non-rewarded odor")
+                if not seen[bool(is_rewarded)]
+                else "_nolegend_"
+            )
+            ax.errorbar(
+                stats.index + x_offset,
+                stats["mean"],
+                yerr=stats["sem"],
+                marker="o",
+                capsize=3,
+                color=colors[bool(is_rewarded)],
+                label=label,
+            )
+            seen[bool(is_rewarded)] = True
+
+        if s_idx < len(sessions) - 1:
+            ax.axvline(
+                x=x_offset + N_APP - 1 + GAP / 2,
+                color="gray",
+                linestyle="--",
+                lw=0.8,
+                alpha=0.6,
+            )
+
+        ax.text(
+            x_offset + (N_APP - 1) / 2,
+            1.01,
+            session_id.split("_", 1)[1],
+            ha="center",
+            va="bottom",
+            fontsize=7,
+            transform=ax.get_xaxis_transform(),
+        )
+
+    all_ticks = [s * STRIDE + a for s in range(len(sessions)) for a in range(N_APP)]
+    ax.set_xticks(all_ticks)
+    ax.set_xticklabels(
+        [str(a) for _ in range(len(sessions)) for a in range(N_APP)], fontsize=7
+    )
+    ax.set_xlim(-0.5, len(sessions) * STRIDE - GAP - 0.5)
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel(
+        "Appearance from first stop" if from_first_stop else "Appearance within block"
+    )
 
 
 def plot_choice_by_block_position_per_session(
@@ -237,83 +313,15 @@ def plot_choice_by_block_position_per_session(
     trials = trials.copy()
 
     if single_axis:
-        n_app = 5   # appearances per odor per block (0-4)
-        gap = 2     # x-units of blank space between sessions
-        stride = n_app + gap
         colors = {True: "tab:orange", False: "tab:blue"}
-
         figures = {}
         for subject, sub in trials.groupby("subject_id"):
             sessions = sorted(sub["session_id"].unique())
             fig, single_ax = plt.subplots(figsize=(max(10, 1.8 * len(sessions)), 4))
-            seen = {True: False, False: False}
-
-            for s_idx, session_id in enumerate(sessions):
-                rs = _appearance_table(
-                    sub[sub["session_id"] == session_id],
-                    from_first_stop=from_first_stop,
-                )
-                x_offset = s_idx * stride
-
-                for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
-                    stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
-                    if stats.empty:
-                        continue
-                    color = colors[bool(is_rewarded)]
-                    lbl = (
-                        ("Rewarded odor" if is_rewarded else "Non-rewarded odor")
-                        if not seen[bool(is_rewarded)]
-                        else "_nolegend_"
-                    )
-                    single_ax.errorbar(
-                        stats.index + x_offset,
-                        stats["mean"],
-                        yerr=stats["sem"],
-                        marker="o",
-                        capsize=3,
-                        color=color,
-                        label=lbl,
-                    )
-                    seen[bool(is_rewarded)] = True
-
-                # vertical separator between sessions
-                if s_idx < len(sessions) - 1:
-                    single_ax.axvline(
-                        x=x_offset + n_app - 1 + gap / 2,
-                        color="gray",
-                        linestyle="--",
-                        lw=0.8,
-                        alpha=0.6,
-                    )
-
-                # session label at top of each session block
-                x_center = x_offset + (n_app - 1) / 2
-                single_ax.text(
-                    x_center,
-                    1.01,
-                    session_id.split("_", 1)[1],
-                    ha="center",
-                    va="bottom",
-                    fontsize=7,
-                    transform=single_ax.get_xaxis_transform(),
-                )
-
-            all_ticks = [
-                s * stride + a for s in range(len(sessions)) for a in range(n_app)
-            ]
-            single_ax.set_xticks(all_ticks)
-            single_ax.set_xticklabels(
-                [str(a) for _ in range(len(sessions)) for a in range(n_app)],
-                fontsize=7,
+            _plot_sessions_on_ax(
+                sub, single_ax, colors, from_first_stop=from_first_stop
             )
-            single_ax.set_xlim(-0.5, len(sessions) * stride - gap - 0.5)
-            single_ax.set_ylim(0, 1.05)
             single_ax.set_ylabel("P(has_choice)")
-            single_ax.set_xlabel(
-                "Appearance from first stop"
-                if from_first_stop
-                else "Appearance within block"
-            )
             single_ax.legend()
             fig.suptitle(f"Subject {subject}{title_suffix}")
             fig.tight_layout()
@@ -377,44 +385,82 @@ def label_first_stop(trials: pd.DataFrame) -> pd.DataFrame:
     return trials
 
 
-def plot_choice_by_block_position_by_first_stop(
-    trials: pd.DataFrame, ax=None, single_axis: bool = False
-):
-    """:func:`plot_choice_by_block_position_per_session`, split by first-stop outcome.
+_FIRST_STOP_COLORS = {
+    (True, True): "#c0392b",  # first-stop rewarded,     rewarded odor
+    (True, False): "#e07b39",  # first-stop rewarded,     non-rewarded odor
+    (False, True): "#1a5276",  # first-stop non-rewarded, rewarded odor
+    (False, False): "#4f8fc0",  # first-stop non-rewarded, non-rewarded odor
+}
 
-    Labels each block by whether its first stop was rewarded
-    (:func:`label_first_stop`), then produces the full per-animal/per-session
-    figure set twice: once for first-stop-rewarded blocks and once for
-    first-stop-non-rewarded blocks. Returns a ``{(subject_id, condition): figure}``
-    dict.
 
-    If ``ax`` is given, every split (subject, session, and condition) is dropped:
-    all blocks that contain a stop are pooled and drawn (aligned to the first
-    stop) into that single axes, which is returned.
+def plot_choice_by_block_position_by_first_stop(trials: pd.DataFrame) -> dict:
+    """Per-animal 2-row × N-sessions grid of P(choice), split by first-stop outcome.
 
-    ``single_axis`` is forwarded to :func:`plot_choice_by_block_position_per_session`
-    to draw all sessions on one axes per subject/condition with vertical separators.
+    Top row: blocks whose first stop was rewarded.
+    Bottom row: blocks whose first stop was not rewarded.
+    One column per session; each cell calls plot_choice_by_block_position directly.
+
+    Colors match the 4-condition palette used in the counterfactual analysis.
+    Returns a {subject_id: figure} dict.
     """
+    import matplotlib.pyplot as plt
+
     trials = label_first_stop(trials)
 
-    if ax is not None:
-        pooled = trials[trials["first_stop_rewarded"].notna()]
-        plot_choice_by_block_position(pooled, ax=ax, from_first_stop=True)
-        return ax
+    CONDITIONS = [
+        (True, "First stop: Rewarded"),
+        (False, "First stop: Non-rewarded"),
+    ]
 
     figures = {}
-    for condition, is_rewarded in [
-        ("first-stop rewarded", True),
-        ("first-stop non-rewarded", False),
-    ]:
-        subset = trials[trials["first_stop_rewarded"] == is_rewarded]
-        for subject, fig in plot_choice_by_block_position_per_session(
-            subset,
-            title_suffix=f" — {condition}",
-            from_first_stop=True,
-            single_axis=single_axis,
-        ).items():
-            figures[(subject, condition)] = fig
+    for subject, sub in trials.groupby("subject_id"):
+        sessions = sorted(sub["session_id"].unique())
+        n_sess = len(sessions)
+
+        fig, axes = plt.subplots(
+            2,
+            n_sess,
+            figsize=(max(10, 3.5 * n_sess), 8),
+            sharey=True,
+            squeeze=False,
+        )
+
+        for row, (is_fsr, row_label) in enumerate(CONDITIONS):
+            cond_colors = {
+                True: _FIRST_STOP_COLORS[(is_fsr, True)],
+                False: _FIRST_STOP_COLORS[(is_fsr, False)],
+            }
+            subset = sub[sub["first_stop_rewarded"] == is_fsr]
+            for col, session_id in enumerate(sessions):
+                ax = axes[row][col]
+                plot_choice_by_block_position(
+                    subset[subset["session_id"] == session_id],
+                    ax=ax,
+                    colors=cond_colors,
+                    from_first_stop=True,
+                    legend=False,
+                )
+                if row == 0:
+                    ax.set_title(session_id.split("_", 1)[1], fontsize=8)
+                if col > 0:
+                    ax.set_ylabel("")
+                if col == 0:
+                    ax.annotate(
+                        row_label,
+                        xy=(0, 0.5),
+                        xycoords="axes fraction",
+                        xytext=(-0.35, 0.5),
+                        textcoords="axes fraction",
+                        rotation=90,
+                        va="center",
+                        ha="right",
+                        fontsize=9,
+                    )
+
+        axes[0][-1].legend(frameon=False, fontsize=8)
+        fig.suptitle(f"Subject {subject} — P(choice) by appearance from first stop")
+        fig.tight_layout()
+        figures[subject] = fig
 
     return figures
 
@@ -599,9 +645,7 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
     rs = rs.sort_values(["session_id", "block", "start_time"])
     # resolve the subject once per session rather than per block
     subject_map = (
-        rs.drop_duplicates("session_id")
-        .set_index("session_id")["subject_id"]
-        .to_dict()
+        rs.drop_duplicates("session_id").set_index("session_id")["subject_id"].to_dict()
     )
 
     records = []
@@ -820,7 +864,13 @@ def plot_counterfactual_heatmap(
                     v = grid[r, c]
                     if np.isnan(v):
                         ax.text(
-                            c, r, "·", ha="center", va="center", color="gray", fontsize=8
+                            c,
+                            r,
+                            "·",
+                            ha="center",
+                            va="center",
+                            color="gray",
+                            fontsize=8,
                         )
                         continue
                     ax.text(
@@ -922,9 +972,7 @@ def plot_counterfactual_cohort_average(
 
     style = _counterfactual_style(value)
 
-    cohort = counterfactual_cohort_average(
-        matrix, value=value, min_animals=min_animals
-    )
+    cohort = counterfactual_cohort_average(matrix, value=value, min_animals=min_animals)
     labels = [label for _, _, label, _ in COUNTERFACTUAL_CELLS]
 
     # dense contiguous session axis so the heatmap's extent lines up exactly with
@@ -1236,9 +1284,7 @@ def counterfactual_window_matrix(
         block=expanded["block_ordinal"],
     )
     matrix = counterfactual_session_matrix(rekeyed, min_blocks=min_blocks)
-    matrix["window"] = (
-        matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
-    )
+    matrix["window"] = matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
     bounds = expanded.drop_duplicates("window")[
         ["window", "window_start", "window_end"]
     ]
@@ -1343,4 +1389,3 @@ def fit_history_glm(
                 }
             )
     return pd.DataFrame(records)
-
