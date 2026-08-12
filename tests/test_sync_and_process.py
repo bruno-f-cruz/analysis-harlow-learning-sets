@@ -132,8 +132,6 @@ def stubs(monkeypatch):
 
 
 def test_syncs_every_raw_session_unsigned(manifest, stubs):
-    # Sessions sync concurrently (see MAX_CONCURRENT_SYNCS), so call order
-    # across sessions isn't guaranteed -- compare as a set.
     sync_and_process.main()
 
     raw_syncs = [c for c in stubs["sync"] if c["src"].startswith("s3://aind-open-data")]
@@ -146,6 +144,32 @@ def test_syncs_every_raw_session_unsigned(manifest, stubs):
         str(sync_and_process.RAW_DIR / "841312_2026-06-04_20-19-36"),
     }
     assert all(c["no_sign_request"] is True for c in raw_syncs)
+
+
+def test_skips_a_session_whose_local_dir_already_exists(manifest, stubs):
+    existing = sync_and_process.RAW_DIR / "841299_2026-06-05_19-13-19"
+    existing.mkdir(parents=True)
+
+    sync_and_process.main()
+
+    raw_syncs = [c for c in stubs["sync"] if c["src"].startswith("s3://aind-open-data")]
+    assert {c["dst"] for c in raw_syncs} == {
+        str(sync_and_process.RAW_DIR / "841312_2026-06-04_20-19-36"),
+    }
+
+
+def test_force_sync_flag_resyncs_existing_dirs_too(manifest, stubs, monkeypatch):
+    existing = sync_and_process.RAW_DIR / "841299_2026-06-05_19-13-19"
+    existing.mkdir(parents=True)
+    monkeypatch.setattr(sys, "argv", ["sync_and_process.py", "--force-sync"])
+
+    sync_and_process.main()
+
+    raw_syncs = [c for c in stubs["sync"] if c["src"].startswith("s3://aind-open-data")]
+    assert {c["dst"] for c in raw_syncs} == {
+        str(sync_and_process.RAW_DIR / "841299_2026-06-05_19-13-19"),
+        str(sync_and_process.RAW_DIR / "841312_2026-06-04_20-19-36"),
+    }
 
 
 def test_processes_the_locally_synced_session_dirs(manifest, stubs):

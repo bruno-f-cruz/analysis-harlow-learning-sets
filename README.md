@@ -71,7 +71,7 @@ Most of the time you don't need this — you're just reading the already-process
    uv run python scripts/sync_and_process.py --upload
    ```
 
-   This is a thin script, not a custom pipeline: it downloads every session in `raw_sessions.json` to `data/raw/` via `aws s3 sync` (idempotent — already-downloaded sessions are skipped), then calls `aind_behavior_vr_foraging_packaging.export_pipeline`'s own `process_sessions`/`aggregate` functions directly on `data/raw/` to (re)build `data/processed/` — excluding the `sniffing` processor, since this analysis doesn't use it. `--upload` syncs `data/processed/` to the scratch bucket via `aws s3 sync`. `data_assets.json`'s location should already point at that same scratch-bucket path; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
+   This is a thin script, not a custom pipeline: for each session in `raw_sessions.json`, if `data/raw/<session>/` already exists it's assumed complete and skipped outright (no `aws s3 sync` call at all — pass `--force-sync` to re-sync anyway); otherwise it's downloaded via `aws s3 sync`. It then calls `aind_behavior_vr_foraging_packaging.export_pipeline`'s own `process_sessions`/`aggregate` functions directly on `data/raw/` to (re)build `data/processed/` — excluding the `sniffing` processor, since this analysis doesn't use it. `--upload` syncs `data/processed/` to the scratch bucket via `aws s3 sync`. `data_assets.json`'s location should already point at that same scratch-bucket path; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
 
 ## Configuration
 

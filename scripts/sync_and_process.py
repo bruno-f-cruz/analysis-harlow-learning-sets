@@ -1,9 +1,12 @@
 """Sync raw sessions from raw_sessions.json and (re)build the processed dataset.
 
 1. Download every raw session listed in ``raw_sessions.json`` (refreshed via
-   ``scripts/attach_datasets.py``) to ``data/raw/`` via ``aws s3 sync``
-   (``MAX_CONCURRENT_SYNCS`` at a time) -- idempotent, so already-downloaded
-   sessions are skipped.
+   ``scripts/attach_datasets.py``) to ``data/raw/``. A session whose local
+   directory already exists is assumed complete and skipped entirely (no
+   ``aws s3 sync`` call at all -- that's what makes a no-op run near-instant);
+   pass ``--force-sync`` to actually re-run ``aws s3 sync`` against every
+   session regardless. Sequential, not concurrent: measured slower here, not
+   faster -- see git history.
 2. Run every processor except ``sniffing`` on each session
    (``aind_behavior_vr_foraging_packaging.export_pipeline.process_sessions``),
    then aggregate ``sites``/``session`` into flat, all-sessions Parquet files
@@ -24,7 +27,6 @@ from __future__ import annotations
 import argparse
 import logging
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from aind_behavior_vr_foraging_packaging.export_pipeline import (
@@ -33,6 +35,7 @@ from aind_behavior_vr_foraging_packaging.export_pipeline import (
     aggregate,
     process_sessions,
 )
+from tqdm import tqdm
 
 from analysis.sessions import load_attached_datasets
 
@@ -46,11 +49,6 @@ SCRATCH_PREFIX = "vr-foraging/harlow-experiments/harlow-experiment"
 
 #: This analysis doesn't use sniffing.
 EXCLUDE_PROCESSORS = ["sniffing"]
-
-#: Each aws_sync call pays fixed CLI-startup + S3-listing overhead (~2s even
-#: for a no-op sync) that's otherwise fully additive across sessions; running
-#: a handful concurrently lets that overhead overlap instead of stacking.
-MAX_CONCURRENT_SYNCS = 4
 
 
 def check_aws_cli_exists() -> None:
@@ -106,6 +104,12 @@ def main() -> None:
         action="store_true",
         help=f"Also sync data/processed/ to s3://{SCRATCH_BUCKET}/{SCRATCH_PREFIX}",
     )
+    parser.add_argument(
+        "--force-sync",
+        action="store_true",
+        help="Re-run aws s3 sync even for sessions whose local directory already "
+        "exists (by default, an existing directory is assumed complete and skipped).",
+    )
     args = parser.parse_args()
 
     check_aws_cli_exists()  # once per run, not once per session -- ~0.9s per subprocess spawn
@@ -117,15 +121,11 @@ def main() -> None:
             "scripts/attach_datasets.py first."
         )
 
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SYNCS) as executor:
-        futures = [
-            executor.submit(
-                aws_sync, entry["location"], str(RAW_DIR / entry["mount"]), no_sign_request=True
-            )
-            for entry in entries
-        ]
-        for future in futures:
-            future.result()  # re-raise on the first sync failure
+    for entry in tqdm(entries, desc="Syncing raw sessions", unit="session"):
+        dest = RAW_DIR / entry["mount"]
+        if dest.exists() and not args.force_sync:
+            continue
+        aws_sync(entry["location"], str(dest), no_sign_request=True)
 
     to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
     process_sessions(
