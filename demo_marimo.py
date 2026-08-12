@@ -62,7 +62,7 @@ def imports_subprocess():
 def imports_data_loading():
     from pathlib import Path
 
-    from data_loading import sync_open_data_sessions
+    from analysis.io import sync_open_data_sessions
 
     return Path, sync_open_data_sessions
 
