@@ -85,7 +85,15 @@ def read_status(path: Path) -> dict[str, Any]:
     progress server after a container restart) gets an identical answer.
     """
     if not path.exists():
-        return {"status": "unknown"}
+        return {
+            "run_id": None,
+            "status": "unknown",
+            "progress": 0.0,
+            "completed": 0,
+            "total": 0,
+            "stage": None,
+            "current_session": None,
+        }
 
     run_id = None
     run_status = "unknown"
@@ -101,13 +109,20 @@ def read_status(path: Path) -> dict[str, Any]:
             line = line.strip()
             if not line:
                 continue
-            event = json.loads(line)
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                # A truncated/malformed trailing line (e.g. the writer was
+                # killed mid-``fh.write``) should not prevent recovering
+                # status from the well-formed lines that came before it.
+                continue
             run_id = event.get("run_id", run_id)
             if event.get("stage") == "run":
                 if event["status"] == "started":
                     run_status = "running"
                 elif event["status"] == "completed":
                     run_status = "completed"
+                    recent_error = None
                 elif event["status"] == "failed":
                     run_status = "failed"
                 continue
@@ -124,9 +139,12 @@ def read_status(path: Path) -> dict[str, Any]:
                     current_session = session
                 elif event["status"] == "completed":
                     session_completed.add(session)
+                    current_session = None
 
             if event["status"] == "error":
                 recent_error = event.get("message")
+            elif event["status"] == "completed":
+                recent_error = None
 
     completed = len(session_completed)
     total = total_sessions or len(session_started)

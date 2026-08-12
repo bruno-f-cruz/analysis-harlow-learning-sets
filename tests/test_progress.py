@@ -184,3 +184,54 @@ def test_read_status_reports_completed_run(tmp_path):
 def test_read_status_missing_file_returns_unknown(tmp_path):
     status = read_status(tmp_path / "does-not-exist.jsonl")
     assert status["status"] == "unknown"
+    assert status["run_id"] is None
+    assert status["progress"] == 0.0
+    assert status["completed"] == 0
+    assert status["total"] == 0
+    assert status["stage"] is None
+    assert status["current_session"] is None
+    assert "error" not in status
+
+
+def test_read_status_skips_truncated_trailing_line(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+    writer.started(stage="run")
+    writer.started(stage="preprocess", session="001", total_sessions=2)
+
+    # Simulate the writer being killed mid-``fh.write`` on the next line.
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write('{"timestamp": "2024-01-01T00:00:00+00:00", "run_id": "abc123"')
+
+    status = read_status(path)
+
+    assert status["run_id"] == "abc123"
+    assert status["status"] == "running"
+    assert status["stage"] == "preprocess"
+    assert status["current_session"] == "001"
+    assert status["total"] == 2
+
+
+def test_read_status_clears_stale_error_after_completion(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+    writer.started(stage="run")
+    writer.error("transient hiccup", stage="preprocess")
+    writer.completed(stage="run")
+
+    status = read_status(path)
+
+    assert status["status"] == "completed"
+    assert "error" not in status
+
+
+def test_read_status_clears_current_session_after_session_completes(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+    writer.started(stage="run")
+    writer.started(stage="preprocess", session="001", total_sessions=2)
+    writer.completed(stage="preprocess", session="001")
+
+    status = read_status(path)
+
+    assert status["current_session"] is None
