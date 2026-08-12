@@ -4,7 +4,7 @@
 
 **Goal:** Retrofit the existing `analysis-harlow-learning-sets` research code (currently flat scripts: `data_loading.py`, `process_sessions.py`, `helpers.py`, `viz_helpers.py`, `demo_marimo.py`) into the reproducible, dockerized, provenance-tracked architecture described in the design spec — without rewriting the working analysis logic.
 
-**Architecture:** Reusable logic moves into `src/analysis/` (thin wrappers around existing `data_loading.py`/`process_sessions.py`/`helpers.py` functions, not rewrites). `workflows/analysis.py` becomes the marimo composition layer (evolved from `demo_marimo.py`). A small `progress.py` writes JSONL events consumed by a FastAPI dashboard (`server/app.py`). Every run gets an immutable `run_id`, a `manifest.json`, `selection.json`, and `inputs.json` under `artifacts/runs/<run_id>/`, written through an `artifact_store` abstraction that is local-filesystem in dev and S3 in production. Docker + `compose.yaml` + `.devcontainer/` make this runnable identically on a laptop, in Codespaces, and on an EC2 VM.
+**Architecture:** Reusable logic moves into `src/analysis/` (thin wrappers around existing `data_loading.py`/`process_sessions.py`/`helpers.py` functions, not rewrites). `workflows/pipeline.py` becomes the marimo composition layer (evolved from `demo_marimo.py`). A small `progress.py` writes JSONL events consumed by a FastAPI dashboard (`server/app.py`). Every run gets an immutable `run_id`, a `manifest.json`, `selection.json`, and `inputs.json` under `artifacts/runs/<run_id>/`, written through an `artifact_store` abstraction that is local-filesystem in dev and S3 in production. Docker + `compose.yaml` + `.devcontainer/` make this runnable identically on a laptop, in Codespaces, and on an EC2 VM.
 
 **Tech Stack:** Python 3.13, `uv`, marimo, DuckDB, boto3/`aind-data-access-api` (already in use), FastAPI + uvicorn, pytest, ruff, Docker/Docker Compose.
 
@@ -12,7 +12,9 @@
 - `data_loading.py` → source for `src/analysis/sessions.py` (catalog query/resolution) and `src/analysis/io.py` (S3 sync/download)
 - `process_sessions.py` → source for `src/analysis/preprocessing.py` (trial/session table building)
 - `helpers.py` / `viz_helpers.py` → source for `src/analysis/features.py` / `src/analysis/analysis.py`
-- `demo_marimo.py` → evolves into `workflows/analysis.py`
+- `demo_marimo.py` → evolves into `workflows/pipeline.py`
+
+**Naming note (discovered during Task 10.1's implementation, applied retroactively throughout this doc):** the workflow notebook is named `workflows/pipeline.py`, not `workflows/analysis.py` as earlier drafts of this plan called it. Naming it `analysis.py` causes a genuine, verified runtime break: running a script prepends the script's own directory to `sys.path`, so `workflows/analysis.py` would be resolved as the module `analysis` before the real installed `src/analysis` package — breaking every `from analysis.X import Y` in the notebook with `ModuleNotFoundError: No module named 'analysis.io'; 'analysis' is not a package`. Confirmed independently via both a minimal runtime repro and `marimo check --strict`, which flags every affected cell with `error[self-import]`. All references below use the corrected `workflows/pipeline.py` name.
 
 ---
 
@@ -200,9 +202,11 @@ package = true
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatchling.build.targets.wheel]
+[tool.hatch.build.targets.wheel]
 packages = ["src/analysis"]
 ```
+
+(Correction from Task 3.1's implementation: the table is `[tool.hatch.build.targets.wheel]`, not `[tool.hatchling...]` — the latter isn't a real hatchling config key and fails the build with "Unable to determine which files to ship." Verified by reproducing the failure directly.)
 
 Run: `uv sync --locked`
 Expected: exits 0; `analysis` is now installed in editable mode.
@@ -1390,13 +1394,13 @@ git commit -m "refactor: move process_sessions.py logic into analysis.preprocess
 
 ### Task 9.2: Move `helpers.py` / `viz_helpers.py` into `src/analysis/features.py` / `src/analysis/plotting.py`
 
-**Decision (confirmed with user):** the GLM fitting / bias / counterfactual *analysis itself* stays where it already lives — as marimo cells in the notebook (which becomes `workflows/analysis.py` in Phase 10, replacing the spec's generic "reusable `analysis.py` module" idea). This phase only relocates the lower-level, non-notebook-specific utilities `helpers.py`/`viz_helpers.py` currently hold (data prep, feature/design-matrix construction, plot-styling helpers like `a_lot_of_style`) so the notebook can still import them from `src/analysis/`. **Do not** try to extract the GLM/bias/counterfactual cell logic itself into a library module — that composition is meant to stay interactive and visible in the notebook.
+**Decision (confirmed with user):** the GLM fitting / bias / counterfactual *analysis itself* stays where it already lives — as marimo cells in the notebook (which becomes `workflows/pipeline.py` in Phase 10, replacing the spec's generic "reusable `analysis.py` module" idea). This phase only relocates the lower-level, non-notebook-specific utilities `helpers.py`/`viz_helpers.py` currently hold (data prep, feature/design-matrix construction, plot-styling helpers like `a_lot_of_style`) so the notebook can still import them from `src/analysis/`. **Do not** try to extract the GLM/bias/counterfactual cell logic itself into a library module — that composition is meant to stay interactive and visible in the notebook.
 
 **Files:**
 - Create: `src/analysis/features.py` — feature/design-matrix construction and data-prep helpers from `helpers.py` that are generic (not GLM-fitting-specific plotting glue)
 - Create: `src/analysis/plotting.py` — plot-styling helpers from `viz_helpers.py` (`a_lot_of_style` etc.)
 - Delete: `helpers.py`, `viz_helpers.py`
-- Modify: `demo_marimo.py` imports (temporary — this file gets renamed to `workflows/analysis.py` in Phase 10, so update imports here and they carry over with the `git mv`)
+- Modify: `demo_marimo.py` imports (temporary — this file gets renamed to `workflows/pipeline.py` in Phase 10, so update imports here and they carry over with the `git mv`)
 
 This is a mechanical split of what's left after leaving analysis/plotting-composition cells alone. Do it function-by-function, running `uv run python -c "import analysis.features, analysis.plotting"` after each batch to catch import errors early, rather than one giant diff.
 
@@ -1418,20 +1422,20 @@ git commit -m "refactor: split helpers.py/viz_helpers.py into analysis.features/
 
 ---
 
-## Phase 10 — Workflow (`workflows/analysis.py`)
+## Phase 10 — Workflow (`workflows/pipeline.py`)
 
-### Task 10.1: `demo_marimo.py` becomes `workflows/analysis.py`
+### Task 10.1: `demo_marimo.py` becomes `workflows/pipeline.py`
 
 **Decision (confirmed with user):** the marimo notebook *is* the analysis — it already builds the GLM/bias/counterfactual plots as cells, so there is no separate library-level `analyze()` to call. This task is a `git mv` (preserving history) plus adding provenance/progress/artifact-writing cells around the existing analysis cells — it is **not** a rewrite of the analysis logic.
 
 **Files:**
-- Rename: `demo_marimo.py` → `workflows/analysis.py` (`git mv`, not copy — keep blame/history)
-- Modify: `workflows/analysis.py` — add setup/provenance cells before the existing analysis cells, and a save/manifest cell after
+- Rename: `demo_marimo.py` → `workflows/pipeline.py` (`git mv`, not copy — keep blame/history)
+- Modify: `workflows/pipeline.py` — add setup/provenance cells before the existing analysis cells, and a save/manifest cell after
 
 **Step 1:** Move the file.
 
 ```bash
-git mv demo_marimo.py workflows/analysis.py
+git mv demo_marimo.py workflows/pipeline.py
 ```
 
 **Step 2:** Add new cells at the top of the notebook (before the existing `imports_marimo`/`imports_data_loading`/`sync_raw_data`/`load_and_prepare_trials` cells) for config, run identity, and progress — leave every existing analysis cell (`choice_by_block_position_pooled`, `history_glm_per_session`, `bias_by_odor_identity`, `counterfactual_matrix`, etc.) untouched:
@@ -1495,7 +1499,13 @@ def finalize(store, progress, run_id, config, build_manifest, git_commit, git_is
         git_commit=git_commit(),
         container_image=os.environ.get("CONTAINER_IMAGE"),
         python_version=host_info()["python_version"],
-        extra={"git_dirty": git_is_dirty(), **host_info()},
+        # NOT `**host_info()` here — host_info()'s "python_version" key collides
+        # with the reserved key already passed above via the explicit
+        # `python_version=` argument, and Task 7.1's `_reject_reserved` guard on
+        # `extra` raises ValueError on any such collision (caught during Task 7.2's
+        # code quality review, before this cell was ever implemented). Pull out
+        # only the non-reserved field(s) instead:
+        extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
     store.write_json("manifest.json", manifest)
     progress.completed(stage="run")
@@ -1506,19 +1516,19 @@ def finalize(store, progress, run_id, config, build_manifest, git_commit, git_is
 
 **Step 3:** Confirm marimo edit-mode launch works.
 
-Run: `uv run marimo edit workflows/analysis.py --host 0.0.0.0 --port 2718`
+Run: `uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718`
 Expected: server starts, notebook opens, no import errors in the first cell.
 
 **Step 4:** Confirm non-interactive execution works (spec section 8 requirement).
 
-Run: `uv run python workflows/analysis.py`
+Run: `uv run python workflows/pipeline.py`
 Expected: exits 0; `artifacts/runs/<run_id>/manifest.json` exists afterward.
 
 **Step 5: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: move demo_marimo.py to workflows/analysis.py, add provenance/progress cells"
+git commit -m "feat: move demo_marimo.py to workflows/pipeline.py, add provenance/progress cells"
 ```
 
 ### Task 10.2: `scripts/run.py` non-interactive entrypoint
@@ -1526,15 +1536,15 @@ git commit -m "feat: move demo_marimo.py to workflows/analysis.py, add provenanc
 **Files:**
 - Create: `scripts/run.py`
 
-Per spec this can just be the documented equivalent of `python workflows/analysis.py` — keep it a one-line shim so there's a single source of truth:
+Per spec this can just be the documented equivalent of `python workflows/pipeline.py` — keep it a one-line shim so there's a single source of truth:
 
 ```python
-"""Non-interactive pipeline entrypoint. Equivalent to `python workflows/analysis.py`."""
+"""Non-interactive pipeline entrypoint. Equivalent to `python workflows/pipeline.py`."""
 
 import runpy
 
 if __name__ == "__main__":
-    runpy.run_path("workflows/analysis.py", run_name="__main__")
+    runpy.run_path("workflows/pipeline.py", run_name="__main__")
 ```
 
 Run: `uv run python scripts/run.py`
@@ -1885,7 +1895,7 @@ services:
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
     working_dir: /workspace
-    command: ["uv", "run", "python", "workflows/analysis.py"]
+    command: ["uv", "run", "python", "workflows/pipeline.py"]
     profiles: ["run"]
 ```
 
@@ -1976,11 +1986,11 @@ git commit -m "feat: add devcontainer.json for VS Code and Codespaces"
 
 Keep the existing "Experiment" section (Harlow's learning sets description) verbatim; add sections:
 
-1. **Quickstart (local)** — clone → `docker compose up -d dev` → attach VS Code or `docker compose exec dev bash` → `uv run marimo edit workflows/analysis.py --host 0.0.0.0 --port 2718` → open `localhost:2718`.
-2. **Running the analysis non-interactively** — `docker compose run --rm analysis` or `uv run python workflows/analysis.py` (document both container and bare-metal `uv run` paths).
+1. **Quickstart (local)** — clone → `docker compose up -d dev` → attach VS Code or `docker compose exec dev bash` → `uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718` → open `localhost:2718`.
+2. **Running the analysis non-interactively** — `docker compose run --rm analysis` or `uv run python workflows/pipeline.py` (document both container and bare-metal `uv run` paths).
 3. **Progress dashboard** — `uv run uvicorn server.app:app --port 8080` (or via compose `dev` service) → `localhost:8080`.
 4. **Codespaces** — open in Codespaces, ports 2718/8080 auto-forward, same commands.
-5. **Which sessions get analyzed — `data_assets.json`** — the repo root has a git-tracked `data_assets.json` (Code-Ocean-style `attached_datasets` list of `{id, mount, location}`) that pins exactly which sessions this analysis targets. To change it, run `uv run attach_datasets.py --subject-ids <ids> --start-date <date>` (a self-contained script — its dependencies are declared inline via PEP 723 and installed into a throwaway env by `uv run`, independent of this repo's own `uv.lock`) and commit the diff. `workflows/analysis.py` only ever reads this file — it never queries DocDB itself.
+5. **Which sessions get analyzed — `data_assets.json`** — the repo root has a git-tracked `data_assets.json` (Code-Ocean-style `attached_datasets` list of `{id, mount, location}`) that pins exactly which sessions this analysis targets. To change it, run `uv run attach_datasets.py --subject-ids <ids> --start-date <date>` (a self-contained script — its dependencies are declared inline via PEP 723 and installed into a throwaway env by `uv run`, independent of this repo's own `uv.lock`) and commit the diff. `workflows/pipeline.py` only ever reads this file — it never queries DocDB itself.
 6. **Configuration** — `configs/default.yaml` holds `data_root`, `artifact_uri`, `aws_region`, and processing flags; env var overrides (`DATASET_URI` for the local raw-data root — *not* related to session selection, which lives in `data_assets.json` above — `ARTIFACT_URI`, `AWS_REGION`, `RUN_ID`).
 7. **AWS credentials — you probably don't need any.** Input session data lives in `aind-open-data`, a public S3 bucket accessed anonymously (unsigned requests) — reading inputs works identically with zero AWS setup on a laptop, in Codespaces, or on EC2. Credentials only come into play if `ARTIFACT_URI` is pointed at a private S3 bucket for writing run outputs in production; in that case, use the normal AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo.
 8. **Run artifacts & provenance** — where `artifacts/runs/<run_id>/` lives, what `manifest.json`/`selection.json`/`inputs.json` mean, how to reproduce a past run.
@@ -2002,7 +2012,7 @@ git commit -m "docs: document docker/codespaces/EC2 workflows and provenance mod
 
 Run through and confirm each of the three flows end-to-end; fix anything that breaks before considering this plan done:
 
-1. **Local:** `git clone` (fresh dir) → open in VS Code → "Reopen in Container" → `uv run marimo edit workflows/analysis.py --host 0.0.0.0 --port 2718` → sessions come from the repo's committed `data_assets.json` → run → `localhost:8080` shows progress → check `./artifacts/runs/<run_id>/`.
+1. **Local:** `git clone` (fresh dir) → open in VS Code → "Reopen in Container" → `uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718` → sessions come from the repo's committed `data_assets.json` → run → `localhost:8080` shows progress → check `./artifacts/runs/<run_id>/`.
 2. **Re-run reproducibility:** re-run without touching `data_assets.json` → confirm a new `run_id` but identical `selection.json`/`inputs.json` content (same attached sessions, read from the same static file — not re-queried against DocDB) and no mutation of the prior run's directory.
 3. **Container disposability:** `docker compose down -v` then `docker compose up -d dev` again → confirm `./artifacts/runs/` (host bind mount) still has every prior run untouched.
 4. **EC2 (or an EC2-shaped local simulation if no test instance is available):** confirm `docker compose up -d` alone (no VS Code) can run `docker compose run --rm analysis` successfully using only an IAM-role-equivalent credential source.
@@ -2021,7 +2031,7 @@ Expected: no lint errors (fix any introduced during the refactor phases).
 
 ## Decisions Resolved With User
 
-1. **Notebook structure:** `demo_marimo.py` is renamed (`git mv`) to `workflows/analysis.py`, not duplicated. The GLM/bias/counterfactual analysis logic stays as marimo cells in that notebook; only lower-level, non-analysis utilities move into `src/analysis/features.py`/`plotting.py`. See Phase 9.2/10.1.
+1. **Notebook structure:** `demo_marimo.py` is renamed (`git mv`) to `workflows/pipeline.py`, not duplicated. The GLM/bias/counterfactual analysis logic stays as marimo cells in that notebook; only lower-level, non-analysis utilities move into `src/analysis/features.py`/`plotting.py`. See Phase 9.2/10.1.
 2. **Test scope:** no synthetic fixture dataset and no integration/e2e test — `tests/conftest.py` is left populated with small reusable unit-test fixtures only, ready for future tests to use. See Phase 12.
 3. **Input dataset location / session selection:** no static `DATASET_URI` bucket, and no live per-run DocDB query either. Which sessions this analysis targets is pinned in a git-tracked `data_assets.json` at the repo root (Code-Ocean-style `attached_datasets` list of `{id, mount, location}`), refreshed only via the explicit, self-contained `uv run attach_datasets.py` command. Routine runs read `data_assets.json`, never DocDB. See Phase 5.3.
 
