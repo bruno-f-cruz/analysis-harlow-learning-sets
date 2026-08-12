@@ -5,8 +5,9 @@ Moved out of the old top-level ``viz_helpers.py`` and ``helpers.py`` (see
 holds ``a_lot_of_style`` plus the generic "choice by block position" plotting
 family, which is reused across several notebook cells and carries no
 research-question-specific interpretation of its own (unlike the GLM-fitting /
-bias / counterfactual analysis, which is intentionally left inline in
-``workflows/analysis.py``, formerly ``demo_marimo.py``).
+bias / counterfactual analysis, which is intentionally left inline in the
+``demo_marimo.py`` notebook; a future task is expected to rename that file to
+``workflows/analysis.py``).
 """
 
 from contextlib import contextmanager
@@ -14,7 +15,7 @@ from contextlib import contextmanager
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from analysis.features import _appearance_table, label_first_stop
+from analysis.features import appearance_table, label_first_stop
 
 
 @contextmanager
@@ -90,7 +91,7 @@ def plot_choice_by_block_position(
     Requires the ``block`` (see :func:`analysis.features.assign_blocks`) and
     ``is_rewarded_odor`` columns to already be present on *trials*.
     """
-    rs = _appearance_table(trials, from_first_stop=from_first_stop)
+    rs = appearance_table(trials, from_first_stop=from_first_stop)
 
     if ax is None:
         _, ax = plt.subplots(figsize=(5, 4))
@@ -134,7 +135,7 @@ def _plot_sessions_on_ax(
     seen = {True: False, False: False}
 
     for s_idx, session_id in enumerate(sessions):
-        rs = _appearance_table(
+        rs = appearance_table(
             sub[sub["session_id"] == session_id], from_first_stop=from_first_stop
         )
         x_offset = s_idx * STRIDE
@@ -394,7 +395,7 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
             for ax, (is_rewarded, title, cmap_name) in zip(axes, odor_panels):
                 cmap = plt.get_cmap(cmap_name)
                 for day, session_id in enumerate(sessions):
-                    rs = _appearance_table(
+                    rs = appearance_table(
                         sub[sub["session_id"] == session_id], from_first_stop=True
                     )
                     grp = rs[rs["is_rewarded_odor"] == is_rewarded]

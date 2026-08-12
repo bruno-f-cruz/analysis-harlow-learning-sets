@@ -43,8 +43,10 @@ build-backend = "hatchling.build"
 packages = ["src/analysis"]
 
 [tool.marimo.runtime]
-# Re-run cells that depend on helpers.py / viz_helpers.py when those files change,
-# instead of silently reusing the already-imported module. This is marimo's
-# equivalent of IPython's %autoreload, but it re-executes the affected cells
-# rather than hot-patching function bodies, so new module-level names work too.
+# Re-run cells that depend on src/analysis/features.py, src/analysis/plotting.py
+# (or any other src/analysis/*.py module the notebook imports from) when those
+# files change, instead of silently reusing the already-imported module. This is
+# marimo's equivalent of IPython's %autoreload, but it re-executes the affected
+# cells rather than hot-patching function bodies, so new module-level names work
+# too.
 auto_reload = "autorun"

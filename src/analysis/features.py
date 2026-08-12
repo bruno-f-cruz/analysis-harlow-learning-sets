@@ -5,8 +5,8 @@ Moved out of the old top-level ``helpers.py`` (see
 the pieces that are pure data transformation (no plotting) and used by more
 than one downstream consumer live here. The GLM-fitting / bias / counterfactual
 *analysis* itself is intentionally **not** here -- that composition stays
-inline in the ``workflows/analysis.py`` (formerly ``demo_marimo.py``) notebook
-cells that use it.
+inline in the ``demo_marimo.py`` notebook cells that use it (a future task is
+expected to rename that file to ``workflows/analysis.py``).
 """
 
 import numpy as np
@@ -132,7 +132,7 @@ def trim_sessions(
     return pd.concat(kept) if kept else trials.iloc[:0]
 
 
-def _appearance_table(
+def appearance_table(
     trials: pd.DataFrame, from_first_stop: bool = False
 ) -> pd.DataFrame:
     """Return RewardSite trials (kept blocks only) with an ``appearance`` column.
