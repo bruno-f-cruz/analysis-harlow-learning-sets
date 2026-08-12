@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.16"
+__generated_with = "0.23.15"
 app = marimo.App(width="full")
 
 
@@ -72,7 +72,7 @@ def sync_raw_data(Path, subprocess, sync_open_data_sessions):
     SUBJECT_IDS = ["841312", "841299", "866063", "864846", "864845"]
     START_DATE = "2026-06-01"
     OUTPUT_ROOT = Path("./data")
-    if False:
+    if True:
         sync_open_data_sessions(
             subject_ids=SUBJECT_IDS,
             start_date=START_DATE,
