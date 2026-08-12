@@ -145,7 +145,7 @@ wheels = [
 [[package]]
 name = "analysis-harlow-learning-sets"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
     { name = "aind-behavior-vr-foraging-packaging" },
