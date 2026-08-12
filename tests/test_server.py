@@ -37,6 +37,25 @@ def test_api_events_returns_recent_events(tmp_path, monkeypatch):
     assert events[-1]["message"] == "hello"
 
 
+def test_api_events_skips_truncated_trailing_line(tmp_path, monkeypatch):
+    progress_path = tmp_path / "progress.jsonl"
+    monkeypatch.setenv("PROGRESS_PATH", str(progress_path))
+    writer = ProgressWriter(progress_path, run_id="abc123")
+    writer.log("hello")
+    # Simulate the container being killed mid-write: a truncated,
+    # malformed trailing line appended after a well-formed one.
+    with progress_path.open("a", encoding="utf-8") as fh:
+        fh.write('{"timestamp": "2024-01-01T00:00:00+00:00", "run_id": "abc123", "sta')
+
+    client = TestClient(create_app())
+    response = client.get("/api/events")
+
+    assert response.status_code == 200
+    events = response.json()
+    assert len(events) == 1
+    assert events[0]["message"] == "hello"
+
+
 def test_root_serves_html_dashboard(tmp_path, monkeypatch):
     monkeypatch.setenv("PROGRESS_PATH", str(tmp_path / "progress.jsonl"))
     client = TestClient(create_app())

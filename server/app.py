@@ -24,7 +24,16 @@ def _read_events(path: Path, limit: int = 100) -> list[dict]:
     if not path.exists():
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
-    return [json.loads(line) for line in lines[-limit:]]
+    events = []
+    for line in lines[-limit:]:
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            # A truncated/malformed trailing line (e.g. the writer was
+            # killed mid-``fh.write``) should not crash the endpoint —
+            # skip it and keep the well-formed events around it.
+            continue
+    return events
 
 
 _DASHBOARD_HTML = """
