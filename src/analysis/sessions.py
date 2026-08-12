@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
 import boto3
@@ -139,3 +140,14 @@ def build_attached_dataset_entries(
         for record in records
     ]
     return sorted(entries, key=lambda entry: entry["mount"])
+
+
+def load_attached_datasets(path: Path | str = "data_assets.json") -> List[Dict[str, Any]]:
+    """Read the repo's ``data_assets.json`` — the durable declaration of which
+    sessions this analysis currently targets (refreshed via ``attach_datasets.py``,
+    not by any live query at run time).
+    """
+    path = Path(path)
+    if not path.exists():
+        return []
+    return json.loads(path.read_text()).get("attached_datasets", [])
