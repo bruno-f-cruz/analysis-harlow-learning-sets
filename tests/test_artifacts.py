@@ -5,7 +5,11 @@ import moto
 import pandas as pd
 import pytest
 
-from analysis.artifacts import LocalArtifactStore, S3ArtifactStore, artifact_store_for_uri
+from analysis.artifacts import (
+    LocalArtifactStore,
+    S3ArtifactStore,
+    artifact_store_for_uri,
+)
 
 
 @pytest.fixture
@@ -15,7 +19,9 @@ def store(tmp_path):
 
 def test_write_json_round_trips(store):
     store.write_json("manifest.json", {"run_id": "run-001"})
-    assert json.loads((store.root / "manifest.json").read_text()) == {"run_id": "run-001"}
+    assert json.loads((store.root / "manifest.json").read_text()) == {
+        "run_id": "run-001"
+    }
 
 
 def test_write_text_creates_parent_dirs(store):
@@ -37,7 +43,9 @@ def test_uri_returns_local_path_string(store):
 def test_write_json_overwrites_existing_file(store):
     store.write_json("manifest.json", {"run_id": "first"})
     store.write_json("manifest.json", {"run_id": "second"})
-    assert json.loads((store.root / "manifest.json").read_text()) == {"run_id": "second"}
+    assert json.loads((store.root / "manifest.json").read_text()) == {
+        "run_id": "second"
+    }
 
 
 def test_write_json_rejects_absolute_path(store, tmp_path):
@@ -61,9 +69,11 @@ def test_s3_store_write_json_round_trips():
 
     store.write_json("manifest.json", {"run_id": "run-001"})
 
-    body = boto3.client("s3", region_name="us-west-2").get_object(
-        Bucket="test-bucket", Key="runs/run-001/manifest.json"
-    )["Body"].read()
+    body = (
+        boto3.client("s3", region_name="us-west-2")
+        .get_object(Bucket="test-bucket", Key="runs/run-001/manifest.json")["Body"]
+        .read()
+    )
     assert body == b'{\n  "run_id": "run-001"\n}'
 
 

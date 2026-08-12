@@ -1,10 +1,14 @@
-"""Sync raw sessions from raw_sessions.json, then regenerate the processed dataset.
+"""Sync raw sessions from raw_sessions.json and (re)build the processed dataset.
 
-Combines two previously-separate steps into one command: download every
-session listed in the raw-data manifest (``raw_sessions.json``, refreshed via
-``scripts/attach_datasets.py``) to ``data/``, then rebuild ``data/processed/``
-from scratch (always -- that's the point of this script) via the same logic
-``scripts/process_sessions.py`` uses.
+1. Download every raw session listed in ``raw_sessions.json`` (refreshed via
+   ``scripts/attach_datasets.py``) to ``data/raw/`` via ``aws s3 sync`` --
+   idempotent, so already-downloaded sessions are skipped.
+2. Run every processor except ``sniffing`` on each session
+   (``aind_behavior_vr_foraging_packaging.export_pipeline.process_sessions``),
+   then aggregate ``sites``/``session`` into flat, all-sessions Parquet files
+   at ``data/processed/`` (``export_pipeline.aggregate``).
+3. With ``--upload``, sync ``data/processed/`` to the scratch bucket
+   ``data_assets.json`` points at.
 
 Usage
 -----
@@ -12,36 +16,81 @@ Usage
 
     uv run python scripts/sync_and_process.py
     uv run python scripts/sync_and_process.py --upload
-    uv run python scripts/sync_and_process.py --exclude-processors licks position_velocity
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+import subprocess
 from pathlib import Path
 
-from analysis.io import _sync_uris_to_local as sync_uris_to_local
-from analysis.preprocessing import process_all
+from aind_behavior_vr_foraging_packaging.export_pipeline import (
+    AggregationRule,
+    Aggregator,
+    aggregate,
+    process_sessions,
+)
+
 from analysis.sessions import load_attached_datasets
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RAW_MANIFEST_PATH = REPO_ROOT / "raw_sessions.json"
-DATA_ROOT = REPO_ROOT / "data"
+RAW_DIR = REPO_ROOT / "data" / "raw"
+PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+
+SCRATCH_BUCKET = "aind-scratch-data"
+SCRATCH_PREFIX = "vr-foraging/harlow-experiments/harlow-experiment"
+
+#: This analysis doesn't use sniffing.
+EXCLUDE_PROCESSORS = ["sniffing"]
+
+
+def check_aws_cli_exists() -> None:
+    """Check if AWS CLI is installed and available in PATH."""
+    try:
+        subprocess.run(
+            ["aws", "--version"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise RuntimeError(
+            "AWS CLI is not installed or not found in PATH. Please install it to proceed."
+        )
+
+
+def aws_sync(src: str, dst: str, *, no_sign_request: bool = False) -> None:
+    """Run ``aws s3 sync`` from *src* to *dst*; raises ``CalledProcessError`` on failure.
+
+    ``aws s3 sync`` only transfers objects that are new or changed, so calling
+    this repeatedly (e.g. for sessions already downloaded) is idempotent.
+    Behavior videos are always excluded -- this analysis doesn't use them.
+
+    Parameters
+    ----------
+    no_sign_request:
+        When ``True``, pass ``--no-sign-request`` so anonymous access is used.
+        Required for public buckets (e.g. ``aind-open-data``) when no AWS
+        credentials with access to the bucket are configured.
+    """
+    check_aws_cli_exists()
+
+    cmd = ["aws", "s3", "sync", src, dst, "--exclude", "Behavior-Videos/*"]
+    if no_sign_request:
+        cmd.append("--no-sign-request")
+
+    logging.info("  $ %s", " ".join(cmd))
+    subprocess.run(cmd, check=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--exclude-processors",
-        nargs="+",
-        default=[],
-        metavar="NAME",
-        help="Extra processor output names to skip (sniffing is always excluded)",
-    )
-    parser.add_argument(
         "--upload",
         action="store_true",
-        help="Also sync the rebuilt data/processed/ to the scratch bucket",
+        help=f"Also sync data/processed/ to s3://{SCRATCH_BUCKET}/{SCRATCH_PREFIX}",
     )
     args = parser.parse_args()
 
@@ -52,15 +101,30 @@ def main() -> None:
             "scripts/attach_datasets.py first."
         )
 
-    sync_uris_to_local(
-        [entry["location"] for entry in entries], DATA_ROOT, no_sign_request=True, confirm=False
+    for entry in entries:
+        aws_sync(entry["location"], str(RAW_DIR / entry["mount"]), no_sign_request=True)
+
+    to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
+    process_sessions(
+        to_process,
+        PROCESSED_DIR,
+        exclude_processors=EXCLUDE_PROCESSORS,
+        write_nwb=False,
+        clean=False,
     )
-    process_all(
-        DATA_ROOT,
-        force=True,  # this script's whole point is to replace the current processed dataset
-        exclude_processors=frozenset(args.exclude_processors),
-        upload=args.upload,
+    aggregate(
+        PROCESSED_DIR / "sessions",
+        PROCESSED_DIR,
+        Aggregator(
+            rules=[
+                AggregationRule("sites", cleanup=False),
+                AggregationRule("session", cleanup=False),
+            ]
+        ),
     )
+
+    if args.upload:
+        aws_sync(str(PROCESSED_DIR), f"s3://{SCRATCH_BUCKET}/{SCRATCH_PREFIX}")
 
 
 if __name__ == "__main__":

@@ -86,17 +86,23 @@ class S3ArtifactStore(ArtifactStore):
 
     def write_json(self, relative_path: str, data: Any) -> None:
         body = json.dumps(data, indent=2, default=str)
-        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=body)
+        self._client.put_object(
+            Bucket=self.bucket, Key=self._key(relative_path), Body=body
+        )
 
     def write_text(self, relative_path: str, text: str) -> None:
-        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=text)
+        self._client.put_object(
+            Bucket=self.bucket, Key=self._key(relative_path), Body=text
+        )
 
     def write_parquet(self, relative_path: str, df: pd.DataFrame) -> None:
         import io
 
         buf = io.BytesIO()
         df.to_parquet(buf)
-        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=buf.getvalue())
+        self._client.put_object(
+            Bucket=self.bucket, Key=self._key(relative_path), Body=buf.getvalue()
+        )
 
     def uri(self, relative_path: str) -> str:
         return f"s3://{self.bucket}/{self._key(relative_path)}"

@@ -4,8 +4,16 @@ from analysis.sessions import build_attached_dataset_entries, load_attached_data
 
 
 RECORDS = [
-    {"_id": "9e2b1c3a", "name": "841312_2026-06-04_20-19-36", "location": "s3://aind-open-data/841312_2026-06-04_20-19-36"},
-    {"_id": "c16d7200", "name": "841299_2026-06-05_19-13-19", "location": "s3://aind-open-data/841299_2026-06-05_19-13-19"},
+    {
+        "_id": "9e2b1c3a",
+        "name": "841312_2026-06-04_20-19-36",
+        "location": "s3://aind-open-data/841312_2026-06-04_20-19-36",
+    },
+    {
+        "_id": "c16d7200",
+        "name": "841299_2026-06-05_19-13-19",
+        "location": "s3://aind-open-data/841299_2026-06-05_19-13-19",
+    },
 ]
 
 
@@ -32,17 +40,29 @@ def test_build_attached_dataset_entries_empty_input():
 
 def test_load_attached_datasets_reads_manifest(tmp_path):
     path = tmp_path / "data_assets.json"
-    path.write_text(json.dumps({
-        "version": 1,
-        "attached_datasets": [
-            {"id": "c16d7200", "mount": "841299_2026-06-05_19-13-19", "location": "s3://aind-open-data/841299_2026-06-05_19-13-19"},
-        ],
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "attached_datasets": [
+                    {
+                        "id": "c16d7200",
+                        "mount": "841299_2026-06-05_19-13-19",
+                        "location": "s3://aind-open-data/841299_2026-06-05_19-13-19",
+                    },
+                ],
+            }
+        )
+    )
 
     entries = load_attached_datasets(path)
 
     assert entries == [
-        {"id": "c16d7200", "mount": "841299_2026-06-05_19-13-19", "location": "s3://aind-open-data/841299_2026-06-05_19-13-19"},
+        {
+            "id": "c16d7200",
+            "mount": "841299_2026-06-05_19-13-19",
+            "location": "s3://aind-open-data/841299_2026-06-05_19-13-19",
+        },
     ]
 
 

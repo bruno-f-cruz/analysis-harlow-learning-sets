@@ -43,7 +43,7 @@ Open this repository in GitHub Codespaces. It uses the same devcontainer (`.devc
 
 ## What gets analyzed — `data_assets.json`
 
-The repo root has a git-tracked `data_assets.json` (a Code-Ocean-style `attached_datasets` list of `{id, mount, location}` entries) that pins exactly what this analysis reads. Unlike the raw-session model this used to follow, it now holds a *single* entry: the already-processed dataset (`session.parquet` + `sites.parquet`, built by `scripts/process_sessions.py`) sitting in the scratch bucket. `workflows/pipeline.py` mounts that location directly — no local sync, no local re-processing, no DocDB query at run time.
+The repo root has a git-tracked `data_assets.json` (a Code-Ocean-style `attached_datasets` list of `{id, mount, location}` entries) that pins exactly what this analysis reads. Unlike the raw-session model this used to follow, it now holds a *single* entry: the already-processed dataset (`session.parquet` + `sites.parquet`, built by `scripts/sync_and_process.py`) sitting in the scratch bucket. `workflows/pipeline.py` mounts that location directly — no local sync, no local re-processing, no DocDB query at run time.
 
 ```json
 {"version": 1, "attached_datasets": [{"id": "harlow-experiment-processed", "mount": "processed", "location": "s3://aind-scratch-data/vr-foraging/harlow-experiments/harlow-experiment"}]}
@@ -71,9 +71,7 @@ Most of the time you don't need this — you're just reading the already-process
    uv run python scripts/sync_and_process.py --upload
    ```
 
-   This downloads every session in `raw_sessions.json` to `data/` (idempotent — re-running only fetches what's missing), then always rebuilds `data/processed/` from scratch. If the raw sessions are already synced and you just want to reprocess (no sync), use `scripts/process_sessions.py` directly instead — see its module docstring for the full flag list (`--force`, `--exclude-processors`, `--upload`).
-
-   See `src/analysis/preprocessing.py`'s module docstring for the full flag list (`--exclude-processors`, etc.). `data_assets.json`'s location should already point at the same scratch-bucket path `--upload` writes to; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
+   This is a thin script, not a custom pipeline: it downloads every session in `raw_sessions.json` to `data/raw/` via `aws s3 sync` (idempotent — already-downloaded sessions are skipped), then calls `aind_behavior_vr_foraging_packaging.export_pipeline`'s own `process_sessions`/`aggregate` functions directly on `data/raw/` to (re)build `data/processed/` — excluding the `sniffing` processor, since this analysis doesn't use it. `--upload` syncs `data/processed/` to the scratch bucket via `aws s3 sync`. `data_assets.json`'s location should already point at that same scratch-bucket path; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
 
 ## Configuration
 
@@ -81,9 +79,9 @@ Plain env vars, read directly where they're used — no config file: `ARTIFACT_U
 
 ## AWS credentials — you probably don't need any
 
-Every *read* in this repo is public/unsigned: the raw `aind-open-data` sessions and the processed dataset in `aind-scratch-data` both allow anonymous access — `workflows/pipeline.py` (Polars, via `storage_options={"skip_signature": "true"}`) and `analysis.io.build_inputs_manifest` (boto3, via `Config(signature_version=UNSIGNED)`) never need credentials to read either bucket.
+Every *read* in this repo is public/unsigned: the raw `aind-open-data` sessions and the processed dataset in `aind-scratch-data` both allow anonymous access — `analysis.sessions.load_processed_table` (Polars, via `storage_options={"skip_signature": "true"}`) and `analysis.sessions.build_inputs_manifest` (boto3, via `Config(signature_version=UNSIGNED)`) never need credentials to read either bucket.
 
-Credentials only come into play for *writes*: `scripts/process_sessions.py --upload` (writing the processed dataset to the scratch bucket — not anonymous even though reading it is), or `ARTIFACT_URI` pointed at a private S3 bucket for writing run outputs in production. Both cases use the standard AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo. This repo currently exercises only the local-filesystem artifact-store path end-to-end for run *outputs* (`ARTIFACT_URI=./artifacts`); `S3ArtifactStore` exists and is unit-tested but isn't wired to a real output bucket yet.
+Credentials only come into play for *writes*: `scripts/sync_and_process.py --upload` (writing the processed dataset to the scratch bucket — not anonymous even though reading it is), or `ARTIFACT_URI` pointed at a private S3 bucket for writing run outputs in production. Both cases use the standard AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo. This repo currently exercises only the local-filesystem artifact-store path end-to-end for run *outputs* (`ARTIFACT_URI=./artifacts`); `S3ArtifactStore` exists and is unit-tested but isn't wired to a real output bucket yet.
 
 ## Run artifacts & provenance
 
@@ -104,7 +102,7 @@ git clone <repo> && cd <repo>
 docker compose up -d
 ```
 
-Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/process_sessions.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
+Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/sync_and_process.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
 
 ```bash
 ssh -L 2718:localhost:2718 -L 8080:localhost:8080 user@ec2-host

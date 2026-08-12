@@ -69,8 +69,7 @@ def imports_provenance():
         git_is_dirty,
         host_info,
     )
-    from analysis.sessions import load_attached_datasets
-    from analysis.io import build_inputs_manifest
+    from analysis.sessions import load_attached_datasets, build_inputs_manifest
     from datetime import datetime, timezone
     import os
 
@@ -93,7 +92,14 @@ def imports_provenance():
 
 @app.cell
 def run_setup(
-    generate_run_id, artifact_store_for_uri, LocalArtifactStore, ProgressWriter, os, Path, datetime, timezone
+    generate_run_id,
+    artifact_store_for_uri,
+    LocalArtifactStore,
+    ProgressWriter,
+    os,
+    Path,
+    datetime,
+    timezone,
 ):
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -121,7 +127,7 @@ def run_setup(
 @app.cell
 def selection(load_attached_datasets, build_inputs_manifest, store, progress, Path):
     # data_assets.json points at the already-processed dataset (see
-    # scripts/attach_datasets.py and scripts/process_sessions.py to regenerate it).
+    # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
     store.write_json("selection.json", {"attached_datasets": attached})
 
@@ -135,20 +141,18 @@ def selection(load_attached_datasets, build_inputs_manifest, store, progress, Pa
 def load_and_prepare_trials(attached):
     import pandas as pd
     import numpy as np
-    import polars as pl
     from analysis.features import (
         add_subject_id,
         assign_blocks,
         report_subject_overrides,
         trim_sessions,
     )
-    # "sites" == trials (one row per site). Read straight from the processed
-    # dataset in the scratch bucket via Polars' S3 reader -- no local sync/
-    # reprocessing. Downstream cells are pandas, so convert once here.
-    dataset_root = attached[0]["location"]
-    trials = pl.scan_parquet(
-        f"{dataset_root}/sites.parquet", storage_options={"skip_signature": "true"}
-    ).collect().to_pandas()
+    from analysis.sessions import load_processed_table
+
+    # "sites" == trials (one row per site). The analysis doesn't need to know
+    # whether the dataset lives on local disk or S3, signed or unsigned --
+    # that's load_processed_table's job, not the analysis's.
+    trials = load_processed_table(attached[0]["location"], "sites")
 
     # A few sessions were acquired under the wrong subject, and upstream is not
     # renaming the assets (the name is only a unique key). Correct the subject
@@ -692,9 +696,7 @@ def history_glm_per_window(np, pd, skip_blocks, trials, window_blocks):
         rs["prev_odor_index"] = grp["odor_index"].shift(1)
         rs["prev_has_choice"] = grp["has_choice"].shift(1)
         rs["prev_has_reward"] = grp["has_reward"].shift(1)
-        rs = rs.dropna(
-            subset=["prev_odor_index", "prev_has_choice", "prev_has_reward"]
-        )
+        rs = rs.dropna(subset=["prev_odor_index", "prev_has_choice", "prev_has_reward"])
 
         is_same = (rs["odor_index"] == rs["prev_odor_index"]).to_numpy()
         prev_choice = rs["prev_has_choice"].astype(bool).to_numpy()
@@ -1244,7 +1246,12 @@ def counterfactual_matrix(np, pd, trials_all):
             grid, sessions, counts = _counterfactual_pivot(matrix, subject, value)
             images.append(
                 ax.imshow(
-                    grid, cmap=cmap, vmin=0, vmax=1, aspect="auto", interpolation="nearest"
+                    grid,
+                    cmap=cmap,
+                    vmin=0,
+                    vmax=1,
+                    aspect="auto",
+                    interpolation="nearest",
                 )
             )
             ax.grid(False)
@@ -1392,7 +1399,9 @@ def counterfactual_matrix(np, pd, trials_all):
         )
         ax_hm.grid(False)
         ax_hm.set_yticks(y)
-        ax_hm.set_yticklabels([label.replace("\n", " ") for label in labels], fontsize=8)
+        ax_hm.set_yticklabels(
+            [label.replace("\n", " ") for label in labels], fontsize=8
+        )
         ax_hm.axhline(1.5, color="white", lw=2.5)  # separate the two first-stop splits
         for tick, color in zip(ax_hm.get_yticklabels(), COUNTERFACTUAL_COLORS):
             tick.set_color(color)
@@ -1665,9 +1674,7 @@ def counterfactual_cohort_by_window(
             block=expanded["block_ordinal"],
         )
         matrix = counterfactual_session_matrix(rekeyed, min_blocks=min_blocks)
-        matrix["window"] = (
-            matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
-        )
+        matrix["window"] = matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
         bounds = expanded.drop_duplicates("window")[
             ["window", "window_start", "window_end"]
         ]

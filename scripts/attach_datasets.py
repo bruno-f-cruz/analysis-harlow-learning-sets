@@ -62,7 +62,10 @@ START_DATE = "2026-06-01"
 
 def query_sessions(subject_ids: list[str], start_date: str) -> list[dict[str, Any]]:
     client = MetadataDbClient(
-        host=API_GATEWAY_HOST, database="metadata_index", collection="data_assets", version="v2"
+        host=API_GATEWAY_HOST,
+        database="metadata_index",
+        collection="data_assets",
+        version="v2",
     )
     query = {
         "subject.subject_id": {"$in": subject_ids},
@@ -74,7 +77,8 @@ def query_sessions(subject_ids: list[str], start_date: str) -> list[dict[str, An
 
 def build_entries(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     entries = [
-        {"id": str(r["_id"]), "mount": r["name"], "location": r["location"]} for r in records
+        {"id": str(r["_id"]), "mount": r["name"], "location": r["location"]}
+        for r in records
     ]
     return sorted(entries, key=lambda e: e["mount"])
 
@@ -112,14 +116,18 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prune", action="store_true", help="Replace the list instead of merging")
+    parser.add_argument(
+        "--prune", action="store_true", help="Replace the list instead of merging"
+    )
     args = parser.parse_args()
 
     records = query_sessions(SUBJECT_IDS, START_DATE)
     fresh_entries = build_entries(records)
 
     manifest = load_manifest(MANIFEST_PATH)
-    manifest["attached_datasets"] = merge(manifest["attached_datasets"], fresh_entries, args.prune)
+    manifest["attached_datasets"] = merge(
+        manifest["attached_datasets"], fresh_entries, args.prune
+    )
     write_manifest(MANIFEST_PATH, manifest)
 
     print(

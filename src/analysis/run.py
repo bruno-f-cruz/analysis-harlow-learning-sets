@@ -113,4 +113,7 @@ def git_is_dirty() -> bool | None:
 
 def host_info() -> dict[str, str]:
     """Hostname and Python version for the current environment."""
-    return {"hostname": socket.gethostname(), "python_version": platform.python_version()}
+    return {
+        "hostname": socket.gethostname(),
+        "python_version": platform.python_version(),
+    }

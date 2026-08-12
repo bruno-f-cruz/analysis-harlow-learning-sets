@@ -31,8 +31,16 @@ def test_build_manifest_contains_required_fields():
         python_version="3.13.0",
     )
     required = {
-        "run_id", "started_at", "completed_at", "status", "git_commit",
-        "container_image", "python_version", "config", "inputs", "selection",
+        "run_id",
+        "started_at",
+        "completed_at",
+        "status",
+        "git_commit",
+        "container_image",
+        "python_version",
+        "config",
+        "inputs",
+        "selection",
     }
     assert required.issubset(manifest.keys())
     assert manifest["config"] == "config.yaml"

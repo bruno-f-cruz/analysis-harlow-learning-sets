@@ -17,7 +17,9 @@ from analysis.progress import read_status
 
 
 def _progress_path() -> Path:
-    return Path(os.environ.get("PROGRESS_PATH", "artifacts/runs/current/progress.jsonl"))
+    return Path(
+        os.environ.get("PROGRESS_PATH", "artifacts/runs/current/progress.jsonl")
+    )
 
 
 def _read_events(path: Path, limit: int = 100) -> list[dict]:
