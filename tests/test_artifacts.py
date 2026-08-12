@@ -29,5 +29,21 @@ def test_write_parquet_round_trips(store):
 
 
 def test_uri_returns_local_path_string(store):
-    store.write_json("manifest.json", {})
     assert store.uri("manifest.json") == str(store.root / "manifest.json")
+
+
+def test_write_json_overwrites_existing_file(store):
+    store.write_json("manifest.json", {"run_id": "first"})
+    store.write_json("manifest.json", {"run_id": "second"})
+    assert json.loads((store.root / "manifest.json").read_text()) == {"run_id": "second"}
+
+
+def test_write_json_rejects_absolute_path(store, tmp_path):
+    absolute_path = str(tmp_path / "outside" / "escape.json")
+    with pytest.raises(ValueError):
+        store.write_json(absolute_path, {})
+
+
+def test_write_json_rejects_path_that_escapes_root(store):
+    with pytest.raises(ValueError):
+        store.write_json("../escape.json", {})

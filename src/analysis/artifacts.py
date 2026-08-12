@@ -8,8 +8,9 @@ backend once via ``artifact_store_for_uri`` and pass it down.
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 import pandas as pd
@@ -37,7 +38,23 @@ class LocalArtifactStore(ArtifactStore):
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _resolve(self, relative_path: str) -> Path:
+        if PurePath(relative_path).is_absolute():
+            raise ValueError(
+                f"relative_path must be relative to root, got absolute path: {relative_path!r}"
+            )
         full = self.root / relative_path
+        root_norm = os.path.normpath(str(self.root))
+        full_norm = os.path.normpath(str(full))
+        try:
+            common = os.path.commonpath([root_norm, full_norm])
+        except ValueError:
+            # Raised e.g. when the two paths are on different drives, which
+            # also means relative_path escaped root.
+            common = None
+        if common != root_norm:
+            raise ValueError(
+                f"relative_path escapes root {self.root!r}: {relative_path!r}"
+            )
         full.parent.mkdir(parents=True, exist_ok=True)
         return full
 
