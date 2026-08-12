@@ -76,7 +76,7 @@ def imports_data_loading():
 @app.cell
 def imports_provenance():
     from analysis.config import load_config
-    from analysis.artifacts import artifact_store_for_uri
+    from analysis.artifacts import artifact_store_for_uri, LocalArtifactStore
     from analysis.progress import ProgressWriter
     from analysis.run import (
         generate_run_id,
@@ -93,6 +93,7 @@ def imports_provenance():
     return (
         load_config,
         artifact_store_for_uri,
+        LocalArtifactStore,
         ProgressWriter,
         generate_run_id,
         build_manifest,
@@ -109,7 +110,7 @@ def imports_provenance():
 
 @app.cell
 def run_setup(
-    load_config, generate_run_id, artifact_store_for_uri, ProgressWriter, os, Path, datetime, timezone
+    load_config, generate_run_id, artifact_store_for_uri, LocalArtifactStore, ProgressWriter, os, Path, datetime, timezone
 ):
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -121,10 +122,14 @@ def run_setup(
     # `store.uri(...)` returns a plain filesystem path for LocalArtifactStore but
     # an "s3://..." string for S3ArtifactStore -- ProgressWriter always opens a
     # real filesystem Path to append to, so this only works when the artifact
-    # store is local. That's the only backend this project exercises end-to-end
-    # so far (see the plan's "Still Open" section); routing progress.jsonl
-    # writes through the `store` abstraction itself would be the more correct
-    # long-term fix, but is out of scope here.
+    # store is local. `ARTIFACT_URI` is wired end-to-end to S3 via `load_config`
+    # + `artifact_store_for_uri`, so guard loudly instead of silently writing
+    # progress.jsonl under a bogus local "s3:" directory when it ever is.
+    if not isinstance(store, LocalArtifactStore):
+        raise NotImplementedError(
+            "progress.jsonl currently requires a local artifact store; "
+            "S3-backed progress tracking isn't implemented yet"
+        )
     progress_path = Path(store.uri("progress.jsonl"))
     progress = ProgressWriter(progress_path, run_id=run_id)
     progress.started(stage="run")
@@ -150,17 +155,21 @@ def sync_raw_data(Path, attached, subprocess, sync_uris_to_local):
     # Session selection now comes from `attached` (built in `selection` above,
     # itself read from data_assets.json) instead of a hardcoded subject/date
     # filter -- but the actual download-to-disk mechanism is unchanged.
+    #
+    # Note: this cell has no use for a subject-id list of its own -- syncing is
+    # driven entirely by `attached`'s locations. Any cell that needs the set of
+    # subjects in this run should use `SUBJECT_IDS_CORRECTED` (derived from
+    # `trials["subject_id"].unique()` in `load_and_prepare_trials`, after the
+    # issue #855 subject-correction remap), not a mount-prefix parse here --
+    # a raw mount prefix can be the *wrong*, pre-correction subject id for the
+    # handful of overridden sessions.
     OUTPUT_ROOT = Path("./data")
-    # `mount` mirrors the local session-dir naming "<subject>_<date>_<time>"
-    # (analysis.sessions.build_attached_dataset_entries), so its first
-    # underscore-delimited token is the subject id.
-    SUBJECT_IDS = sorted({entry["mount"].split("_")[0] for entry in attached})
     uris = [entry["location"] for entry in attached]
     if True:
         sync_uris_to_local(uris, OUTPUT_ROOT, no_sign_request=True, confirm=False)
         #! uv run python process_sessions.py
         subprocess.call(["uv", "run", "python", "process_sessions.py"])
-    return (SUBJECT_IDS,)
+    return
 
 
 @app.cell
@@ -244,7 +253,13 @@ def load_and_prepare_trials():
     )
 
     trials = trials[~trials["p_stay_in_block"].isin([0.0, 1.0])]
-    return np, pd, trials, trials_all
+
+    # Corrected subject ids (post issue #855 `add_subject_id` remap), for any
+    # downstream cell that groups/plots by subject -- NOT the same set as the
+    # raw mount-prefix-derived `SUBJECT_IDS` from `sync_raw_data`, which predates
+    # `trials` and can't see the override.
+    SUBJECT_IDS_CORRECTED = sorted(trials["subject_id"].unique())
+    return np, pd, trials, trials_all, SUBJECT_IDS_CORRECTED
 
 
 @app.cell
@@ -282,10 +297,10 @@ def sql_over_trials(mo, trials_all):
 
 
 @app.cell
-def choice_by_block_position_pooled(SUBJECT_IDS, plt, trials):
+def choice_by_block_position_pooled(SUBJECT_IDS_CORRECTED, plt, trials):
     from analysis.plotting import a_lot_of_style, plot_choice_by_block_position
 
-    for _animal in SUBJECT_IDS:
+    for _animal in SUBJECT_IDS_CORRECTED:
         print(f"Animal {_animal}")
         _fig = plt.figure(figsize=(10, 6))
         _ax = _fig.add_subplot(111)
@@ -332,7 +347,7 @@ def choice_by_first_stop_overlay(a_lot_of_style, plt, trials):
 
 @app.cell
 def choice_at_first_stops_across_sessions(
-    SUBJECT_IDS,
+    SUBJECT_IDS_CORRECTED,
     a_lot_of_style,
     np,
     plt,
@@ -354,12 +369,12 @@ def choice_at_first_stops_across_sessions(
     with a_lot_of_style():
         _fig, _axes = plt.subplots(
             1,
-            len(SUBJECT_IDS),
-            figsize=(5 * len(SUBJECT_IDS), 4),
+            len(SUBJECT_IDS_CORRECTED),
+            figsize=(5 * len(SUBJECT_IDS_CORRECTED), 4),
             sharey=True,
             squeeze=False,
         )
-        for _ax, _animal in zip(_axes[0], SUBJECT_IDS):
+        for _ax, _animal in zip(_axes[0], SUBJECT_IDS_CORRECTED):
             for stop_pos, _style in STOP_STYLES.items():
                 stop_trials = _rs[_rs["_block_pos"] == stop_pos].copy()
                 session_means = (
