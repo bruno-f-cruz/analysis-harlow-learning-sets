@@ -213,7 +213,12 @@ __marimo__/
 .vscode/
 
 #
-data/
+data/*
+!data/.gitkeep
+
+# Run artifacts (local dev only — production artifacts live in S3)
+/artifacts/runs/*
+!/artifacts/.gitkeep
 
 # figures written by a command-line run of demo_marimo.py
 scratch/
