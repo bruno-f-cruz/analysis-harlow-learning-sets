@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from analysis.progress import ProgressWriter
+from analysis.progress import ProgressWriter, read_status
 
 
 def test_started_writes_jsonl_event(tmp_path):
@@ -150,3 +150,37 @@ def test_reserved_key_in_fields_raises_on_log(tmp_path, reserved_key):
         writer.log("note", **{reserved_key: "spoofed"})
 
     assert not path.exists()
+
+
+def test_read_status_reconstructs_from_event_log(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+    writer.started(stage="run")
+    writer.started(stage="preprocess", session="001", total_sessions=2)
+    writer.completed(stage="preprocess", session="001")
+    writer.started(stage="preprocess", session="002", total_sessions=2)
+
+    status = read_status(path)
+
+    assert status["run_id"] == "abc123"
+    assert status["status"] == "running"
+    assert status["stage"] == "preprocess"
+    assert status["current_session"] == "002"
+    assert status["completed"] == 1
+    assert status["total"] == 2
+    assert status["progress"] == 0.5
+
+
+def test_read_status_reports_completed_run(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+    writer.started(stage="run")
+    writer.completed(stage="run")
+
+    status = read_status(path)
+    assert status["status"] == "completed"
+
+
+def test_read_status_missing_file_returns_unknown(tmp_path):
+    status = read_status(tmp_path / "does-not-exist.jsonl")
+    assert status["status"] == "unknown"

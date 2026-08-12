@@ -76,3 +76,71 @@ class ProgressWriter:
     def log(self, message: str, /, **fields: Any) -> None:
         self._reject_reserved(fields, "message")
         self._write("info", message=message, **fields)
+
+
+def read_status(path: Path) -> dict[str, Any]:
+    """Reconstruct current run status by replaying ``progress.jsonl``.
+
+    No state is kept anywhere except this file, so a fresh process (e.g. the
+    progress server after a container restart) gets an identical answer.
+    """
+    if not path.exists():
+        return {"status": "unknown"}
+
+    run_id = None
+    run_status = "unknown"
+    stage = None
+    current_session = None
+    session_started: set[str] = set()
+    session_completed: set[str] = set()
+    total_sessions = 0
+    recent_error: str | None = None
+
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            event = json.loads(line)
+            run_id = event.get("run_id", run_id)
+            if event.get("stage") == "run":
+                if event["status"] == "started":
+                    run_status = "running"
+                elif event["status"] == "completed":
+                    run_status = "completed"
+                elif event["status"] == "failed":
+                    run_status = "failed"
+                continue
+
+            if event.get("stage") is not None:
+                stage = event["stage"]
+
+            session = event.get("session")
+            if session is not None:
+                if "total_sessions" in event:
+                    total_sessions = event["total_sessions"]
+                if event["status"] == "started":
+                    session_started.add(session)
+                    current_session = session
+                elif event["status"] == "completed":
+                    session_completed.add(session)
+
+            if event["status"] == "error":
+                recent_error = event.get("message")
+
+    completed = len(session_completed)
+    total = total_sessions or len(session_started)
+    progress = (completed / total) if total else 0.0
+
+    result = {
+        "run_id": run_id,
+        "status": run_status,
+        "progress": progress,
+        "completed": completed,
+        "total": total,
+        "stage": stage,
+        "current_session": current_session,
+    }
+    if recent_error:
+        result["error"] = recent_error
+    return result
