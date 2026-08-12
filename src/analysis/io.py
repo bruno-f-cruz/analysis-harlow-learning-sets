@@ -14,12 +14,6 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 from rich.prompt import Confirm
 from rich.table import Table
 
-from analysis.sessions import (
-    OPEN_DATA_BUCKET,
-    list_open_data_sessions,
-    query_records_by_subject_and_date,
-)
-
 MAX_CONCURRENT_DOWNLOADS = 4
 
 
@@ -36,89 +30,6 @@ def check_aws_cli_exists() -> None:
         raise RuntimeError(
             "AWS CLI is not installed or not found in PATH. Please install it to proceed."
         )
-
-
-def sync_open_data_sessions(
-    subject_ids: List[str],
-    start_date: str,
-    output_root: Path,
-    bucket: str = OPEN_DATA_BUCKET,
-    include_derived: bool = True,
-    confirm: bool = True,
-) -> None:
-    """Download all open-data sessions for the given subjects/date to disk.
-
-    Lists ``s3://<bucket>`` directly (anonymous access) for assets whose session
-    date is on or after *start_date*, then syncs them to *output_root*. Syncing
-    is idempotent: existing local files are not re-downloaded. Pass
-    ``confirm=False`` to skip the interactive prompt (e.g. in a notebook).
-    """
-    uris = list_open_data_sessions(
-        subject_ids=subject_ids,
-        start_date=start_date,
-        bucket=bucket,
-        include_derived=include_derived,
-    )
-
-    if not uris:
-        logging.warning(
-            "No S3 assets found for subjects %s from %s onward. Nothing to download.",
-            subject_ids,
-            start_date,
-        )
-        return
-
-    _sync_uris_to_local(uris, output_root, no_sign_request=True, confirm=confirm)
-
-
-def sync_sessions_by_subject_and_date(
-    subject_ids: List[str],
-    start_date: str,
-    output_root: Path,
-) -> None:
-    """Download all sessions matching the given subject IDs and start date.
-
-    Queries the AIND DocumentDB for sessions whose
-    ``session.session_start_time`` is on or after *start_date* and whose
-    ``subject.subject_id`` is in *subject_ids*, then syncs the matching S3
-    assets to *output_root*.
-
-    Parameters
-    ----------
-    subject_ids:
-        List of subject (animal) IDs to filter on, e.g. ``["841312", "841299"]``.
-    start_date:
-        ISO-format date string (``"YYYY-MM-DD"``), e.g. ``"2026-06-01"``.
-    output_root:
-        Local directory where the S3 assets will be synced.
-    """
-    records = query_records_by_subject_and_date(
-        subject_ids=subject_ids,
-        start_date=start_date,
-    )
-
-    if not records:
-        logging.warning(
-            "No records found for subjects %s from %s onward. Nothing to download.",
-            subject_ids,
-            start_date,
-        )
-        return
-
-    sync_s3_catalog_records_to_local(records, output_root)
-
-
-def sync_s3_catalog_records_to_local(
-    records: Dict[str, Any], output_root: Path
-) -> None:
-    uris: list[str] = []
-    for record in records:
-        s3_uris = extract_s3_locations(record)
-        if not s3_uris:
-            raise ValueError(f"No S3 URIs found in record: {record}")
-        uris.extend(s3_uris)
-
-    _sync_uris_to_local(uris, output_root)
 
 
 def _sync_uris_to_local(
@@ -210,43 +121,6 @@ def _sync_uris_to_local(
 
                 progress.update(overall_task, advance=1)
                 live.update(Group(progress, render_status_table()))
-
-
-def extract_s3_locations(record: Dict[str, Any]) -> List[str]:
-    """Best-effort extraction of S3 locations from a record's `location` field."""
-
-    locations: List[str] = []
-    raw_location = record.get("location")
-
-    def handle_one(item: Any) -> None:
-        if isinstance(item, str) and item.startswith("s3://"):
-            locations.append(item)
-            return
-
-        if isinstance(item, dict):
-            uri = None
-            if "s3_uri" in item and isinstance(item["s3_uri"], str):
-                uri = item["s3_uri"]
-            elif "bucket" in item and "key" in item:
-                bucket = item["bucket"]
-                key = item["key"]
-                if isinstance(bucket, str) and isinstance(key, str):
-                    uri = f"s3://{bucket}/{key}"
-
-            if uri and isinstance(uri, str) and uri.startswith("s3://"):
-                locations.append(uri)
-
-    if isinstance(raw_location, list):
-        for sub in raw_location:
-            if isinstance(sub, list):
-                for subsub in sub:
-                    handle_one(subsub)
-            else:
-                handle_one(sub)
-    else:
-        handle_one(raw_location)
-
-    return locations
 
 
 def download_s3_asset(

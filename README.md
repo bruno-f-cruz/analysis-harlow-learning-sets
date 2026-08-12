@@ -65,21 +65,23 @@ Most of the time you don't need this — you're just reading the already-process
 
    Which animals/dates to query are hard-coded constants at the top of `scripts/attach_datasets.py` (`SUBJECT_IDS`/`START_DATE`) rather than CLI flags — edit those directly when you need to change them. It queries the DocDB via `version="v2"` (the default `"v1"` returns nothing for these sessions — they're indexed under the newer aind-data-schema layout, where the timestamp field also moved from `session.session_start_time` to `acquisition.acquisition_start_time`), filtered to `data_description.data_level: "raw"` so derived/processed assets are excluded. By default, newly matched sessions are *added* to the existing list; existing entries are kept even if they no longer match the query.
 
-2. **Sync those raw sessions to local disk and process them**, then upload the result:
+2. **Sync those raw sessions to local disk and rebuild the processed dataset**, then upload the result:
 
    ```bash
-   uv run python scripts/process_sessions.py --force --upload
+   uv run python scripts/sync_and_process.py --upload
    ```
+
+   This downloads every session in `raw_sessions.json` to `data/` (idempotent — re-running only fetches what's missing), then always rebuilds `data/processed/` from scratch. If the raw sessions are already synced and you just want to reprocess (no sync), use `scripts/process_sessions.py` directly instead — see its module docstring for the full flag list (`--force`, `--exclude-processors`, `--upload`).
 
    See `src/analysis/preprocessing.py`'s module docstring for the full flag list (`--exclude-processors`, etc.). `data_assets.json`'s location should already point at the same scratch-bucket path `--upload` writes to; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
 
 ## Configuration
 
-`configs/default.yaml` holds `data_root`, `artifact_uri`, `aws_region`, and processing flags. Env var overrides: `DATASET_URI` (local raw-data root — only relevant when regenerating the processed dataset, see above), `ARTIFACT_URI`, `AWS_REGION`, `RUN_ID`.
+Plain env vars, read directly where they're used — no config file: `ARTIFACT_URI` (run output location, default `./artifacts`), `AWS_REGION`, `RUN_ID`.
 
 ## AWS credentials — you probably don't need any
 
-Every *read* in this repo is public/unsigned: the raw `aind-open-data` sessions and the processed dataset in `aind-scratch-data` both allow anonymous access — `workflows/pipeline.py` (Polars, via `storage_options={"skip_signature": "true"}`) and `analysis.io.build_inputs_manifest`/`list_open_data_sessions` (boto3, via `Config(signature_version=UNSIGNED)`) never need credentials to read either bucket.
+Every *read* in this repo is public/unsigned: the raw `aind-open-data` sessions and the processed dataset in `aind-scratch-data` both allow anonymous access — `workflows/pipeline.py` (Polars, via `storage_options={"skip_signature": "true"}`) and `analysis.io.build_inputs_manifest` (boto3, via `Config(signature_version=UNSIGNED)`) never need credentials to read either bucket.
 
 Credentials only come into play for *writes*: `scripts/process_sessions.py --upload` (writing the processed dataset to the scratch bucket — not anonymous even though reading it is), or `ARTIFACT_URI` pointed at a private S3 bucket for writing run outputs in production. Both cases use the standard AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo. This repo currently exercises only the local-filesystem artifact-store path end-to-end for run *outputs* (`ARTIFACT_URI=./artifacts`); `S3ArtifactStore` exists and is unit-tested but isn't wired to a real output bucket yet.
 

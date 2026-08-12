@@ -60,7 +60,6 @@ def imports_pathlib():
 
 @app.cell
 def imports_provenance():
-    from analysis.config import load_config
     from analysis.artifacts import artifact_store_for_uri, LocalArtifactStore
     from analysis.progress import ProgressWriter
     from analysis.run import (
@@ -76,7 +75,6 @@ def imports_provenance():
     import os
 
     return (
-        load_config,
         artifact_store_for_uri,
         LocalArtifactStore,
         ProgressWriter,
@@ -95,21 +93,20 @@ def imports_provenance():
 
 @app.cell
 def run_setup(
-    load_config, generate_run_id, artifact_store_for_uri, LocalArtifactStore, ProgressWriter, os, Path, datetime, timezone
+    generate_run_id, artifact_store_for_uri, LocalArtifactStore, ProgressWriter, os, Path, datetime, timezone
 ):
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
     # rejects a `setup` cell that (like this one) depends on other cells.
-    config = load_config(Path(__file__).parent.parent / "configs" / "default.yaml")
     run_id = os.environ.get("RUN_ID") or generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
-    store = artifact_store_for_uri(f"{config['artifact_uri']}/runs/{run_id}")
+    artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
+    store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
     # `store.uri(...)` returns a plain filesystem path for LocalArtifactStore but
     # an "s3://..." string for S3ArtifactStore -- ProgressWriter always opens a
     # real filesystem Path to append to, so this only works when the artifact
-    # store is local. `ARTIFACT_URI` is wired end-to-end to S3 via `load_config`
-    # + `artifact_store_for_uri`, so guard loudly instead of silently writing
-    # progress.jsonl under a bogus local "s3:" directory when it ever is.
+    # store is local. Guard loudly instead of silently writing progress.jsonl
+    # under a bogus local "s3:" directory when ARTIFACT_URI points at S3.
     if not isinstance(store, LocalArtifactStore):
         raise NotImplementedError(
             "progress.jsonl currently requires a local artifact store; "
@@ -118,7 +115,7 @@ def run_setup(
     progress_path = Path(store.uri("progress.jsonl"))
     progress = ProgressWriter(progress_path, run_id=run_id)
     progress.started(stage="run")
-    return config, run_id, started_at, store, progress, progress_path
+    return run_id, started_at, store, progress, progress_path
 
 
 @app.cell

@@ -10,7 +10,6 @@ services:
       - "8080:8080"
     working_dir: /workspace
     environment:
-      - DATASET_URI=${DATASET_URI:-}
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
       # Reads need no credentials (public buckets). Writes (ARTIFACT_URI to a
@@ -28,7 +27,6 @@ services:
       - .:/workspace
       - ./artifacts:/artifacts
     environment:
-      - DATASET_URI=${DATASET_URI:-}
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
     working_dir: /workspace
