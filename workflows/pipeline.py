@@ -62,23 +62,102 @@ def imports_subprocess():
 def imports_data_loading():
     from pathlib import Path
 
-    from analysis.io import sync_open_data_sessions
+    # `sync_open_data_sessions` (list-by-subject-and-date, then sync) is no
+    # longer the entry point here -- `selection` below already resolves the
+    # exact sessions to use from data_assets.json. We reuse its underlying
+    # sync mechanism directly, aliased to a public-looking name since it's
+    # the same "download these S3 prefixes to local disk" primitive
+    # `sync_open_data_sessions` itself calls after listing.
+    from analysis.io import _sync_uris_to_local as sync_uris_to_local
 
-    return Path, sync_open_data_sessions
+    return Path, sync_uris_to_local
 
 
 @app.cell
-def sync_raw_data(Path, subprocess, sync_open_data_sessions):
-    SUBJECT_IDS = ["841312", "841299", "866063", "864846", "864845"]
-    START_DATE = "2026-06-01"
+def imports_provenance():
+    from analysis.config import load_config
+    from analysis.artifacts import artifact_store_for_uri
+    from analysis.progress import ProgressWriter
+    from analysis.run import (
+        generate_run_id,
+        build_manifest,
+        git_commit,
+        git_is_dirty,
+        host_info,
+    )
+    from analysis.sessions import load_attached_datasets
+    from analysis.io import build_inputs_manifest
+    from datetime import datetime, timezone
+    import os
+
+    return (
+        load_config,
+        artifact_store_for_uri,
+        ProgressWriter,
+        generate_run_id,
+        build_manifest,
+        git_commit,
+        git_is_dirty,
+        host_info,
+        load_attached_datasets,
+        build_inputs_manifest,
+        datetime,
+        timezone,
+        os,
+    )
+
+
+@app.cell
+def run_setup(
+    load_config, generate_run_id, artifact_store_for_uri, ProgressWriter, os, Path, datetime, timezone
+):
+    # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
+    # name `setup` for its own special zero-argument "setup cell" concept, and
+    # rejects a `setup` cell that (like this one) depends on other cells.
+    config = load_config(Path(__file__).parent.parent / "configs" / "default.yaml")
+    run_id = os.environ.get("RUN_ID") or generate_run_id()
+    started_at = datetime.now(timezone.utc).isoformat()
+    store = artifact_store_for_uri(f"{config['artifact_uri']}/runs/{run_id}")
+    # `store.uri(...)` returns a plain filesystem path for LocalArtifactStore but
+    # an "s3://..." string for S3ArtifactStore -- ProgressWriter always opens a
+    # real filesystem Path to append to, so this only works when the artifact
+    # store is local. That's the only backend this project exercises end-to-end
+    # so far (see the plan's "Still Open" section); routing progress.jsonl
+    # writes through the `store` abstraction itself would be the more correct
+    # long-term fix, but is out of scope here.
+    progress_path = Path(store.uri("progress.jsonl"))
+    progress = ProgressWriter(progress_path, run_id=run_id)
+    progress.started(stage="run")
+    return config, run_id, started_at, store, progress, progress_path
+
+
+@app.cell
+def selection(load_attached_datasets, build_inputs_manifest, store, progress, Path):
+    # No live DocDB query here -- data_assets.json (repo root) is the pinned,
+    # git-tracked source of truth for which sessions this run analyzes.
+    # Refresh it separately with `uv run attach_datasets.py ...` when needed.
+    attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
+    store.write_json("selection.json", {"attached_datasets": attached})
+
+    inputs = build_inputs_manifest([entry["location"] for entry in attached])
+    store.write_json("inputs.json", inputs)
+    progress.log(f"resolved {len(attached)} attached sessions from data_assets.json")
+    return attached, inputs
+
+
+@app.cell
+def sync_raw_data(Path, attached, subprocess, sync_uris_to_local):
+    # Session selection now comes from `attached` (built in `selection` above,
+    # itself read from data_assets.json) instead of a hardcoded subject/date
+    # filter -- but the actual download-to-disk mechanism is unchanged.
     OUTPUT_ROOT = Path("./data")
+    # `mount` mirrors the local session-dir naming "<subject>_<date>_<time>"
+    # (analysis.sessions.build_attached_dataset_entries), so its first
+    # underscore-delimited token is the subject id.
+    SUBJECT_IDS = sorted({entry["mount"].split("_")[0] for entry in attached})
+    uris = [entry["location"] for entry in attached]
     if True:
-        sync_open_data_sessions(
-            subject_ids=SUBJECT_IDS,
-            start_date=START_DATE,
-            output_root=OUTPUT_ROOT,
-            confirm=False,
-        )
+        sync_uris_to_local(uris, OUTPUT_ROOT, no_sign_request=True, confirm=False)
         #! uv run python process_sessions.py
         subprocess.call(["uv", "run", "python", "process_sessions.py"])
     return (SUBJECT_IDS,)
@@ -1653,6 +1732,40 @@ def counterfactual_cohort_by_window(
         .to_string()
     )
     return
+
+
+@app.cell
+def finalize(
+    store,
+    progress,
+    run_id,
+    started_at,
+    build_manifest,
+    git_commit,
+    git_is_dirty,
+    host_info,
+    os,
+    datetime,
+    timezone,
+):
+    manifest = build_manifest(
+        run_id=run_id,
+        started_at=started_at,
+        completed_at=datetime.now(timezone.utc).isoformat(),
+        status="completed",
+        git_commit=git_commit(),
+        container_image=os.environ.get("CONTAINER_IMAGE"),
+        python_version=host_info()["python_version"],
+        # NOT `**host_info()` here -- host_info()'s "python_version" key
+        # collides with the reserved key already passed above via the
+        # explicit `python_version=` argument, and build_manifest's
+        # `_reject_reserved` guard on `extra` raises ValueError on any such
+        # collision. Pull out only the non-reserved field(s).
+        extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
+    )
+    store.write_json("manifest.json", manifest)
+    progress.completed(stage="run")
+    return (manifest,)
 
 
 if __name__ == "__main__":
