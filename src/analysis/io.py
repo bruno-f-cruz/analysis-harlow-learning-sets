@@ -12,13 +12,12 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 from analysis.sessions import (
+    OPEN_DATA_BUCKET,
     list_open_data_sessions,
     query_records_by_subject_and_date,
 )
 
 MAX_CONCURRENT_DOWNLOADS = 4
-
-OPEN_DATA_BUCKET = "aind-open-data"
 
 
 def check_aws_cli_exists() -> None:
