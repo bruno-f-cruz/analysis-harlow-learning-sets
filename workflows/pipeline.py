@@ -52,25 +52,10 @@ def figure_output(mo):
 
 
 @app.cell
-def imports_subprocess():
-    import subprocess
-
-    return (subprocess,)
-
-
-@app.cell
-def imports_data_loading():
+def imports_pathlib():
     from pathlib import Path
 
-    # `sync_open_data_sessions` (list-by-subject-and-date, then sync) is no
-    # longer the entry point here -- `selection` below already resolves the
-    # exact sessions to use from data_assets.json. We reuse its underlying
-    # sync mechanism directly, aliased to a public-looking name since it's
-    # the same "download these S3 prefixes to local disk" primitive
-    # `sync_open_data_sessions` itself calls after listing.
-    from analysis.io import _sync_uris_to_local as sync_uris_to_local
-
-    return Path, sync_uris_to_local
+    return (Path,)
 
 
 @app.cell
@@ -138,52 +123,35 @@ def run_setup(
 
 @app.cell
 def selection(load_attached_datasets, build_inputs_manifest, store, progress, Path):
-    # No live DocDB query here -- data_assets.json (repo root) is the pinned,
-    # git-tracked source of truth for which sessions this run analyzes.
-    # Refresh it separately with `uv run attach_datasets.py ...` when needed.
+    # data_assets.json points at the already-processed dataset (see
+    # attach_datasets.py/process_sessions.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
     store.write_json("selection.json", {"attached_datasets": attached})
 
     inputs = build_inputs_manifest([entry["location"] for entry in attached])
     store.write_json("inputs.json", inputs)
-    progress.log(f"resolved {len(attached)} attached sessions from data_assets.json")
+    progress.log(f"resolved {len(attached)} attached dataset(s) from data_assets.json")
     return attached, inputs
 
 
 @app.cell
-def sync_raw_data(Path, attached, subprocess, sync_uris_to_local):
-    # Session selection now comes from `attached` (built in `selection` above,
-    # itself read from data_assets.json) instead of a hardcoded subject/date
-    # filter -- but the actual download-to-disk mechanism is unchanged.
-    #
-    # Note: this cell has no use for a subject-id list of its own -- syncing is
-    # driven entirely by `attached`'s locations. Any cell that needs the set of
-    # subjects in this run should use `SUBJECT_IDS_CORRECTED` (derived from
-    # `trials["subject_id"].unique()` in `load_and_prepare_trials`, after the
-    # issue #855 subject-correction remap), not a mount-prefix parse here --
-    # a raw mount prefix can be the *wrong*, pre-correction subject id for the
-    # handful of overridden sessions.
-    OUTPUT_ROOT = Path("./data")
-    uris = [entry["location"] for entry in attached]
-    if True:
-        sync_uris_to_local(uris, OUTPUT_ROOT, no_sign_request=True, confirm=False)
-        #! uv run python process_sessions.py
-        subprocess.call(["uv", "run", "python", "process_sessions.py"])
-    return
-
-
-@app.cell
-def load_and_prepare_trials():
+def load_and_prepare_trials(attached):
     import pandas as pd
     import numpy as np
+    import polars as pl
     from analysis.features import (
         add_subject_id,
         assign_blocks,
         report_subject_overrides,
         trim_sessions,
     )
-
-    trials = pd.read_parquet("data/processed/trials.parquet")
+    # "sites" == trials (one row per site). Read straight from the processed
+    # dataset in the scratch bucket via Polars' S3 reader -- no local sync/
+    # reprocessing. Downstream cells are pandas, so convert once here.
+    dataset_root = attached[0]["location"]
+    trials = pl.scan_parquet(
+        f"{dataset_root}/sites.parquet", storage_options={"skip_signature": "true"}
+    ).collect().to_pandas()
 
     # A few sessions were acquired under the wrong subject, and upstream is not
     # renaming the assets (the name is only a unique key). Correct the subject
@@ -264,10 +232,9 @@ def load_and_prepare_trials():
 
 @app.cell
 def sql_over_trials(mo, trials_all):
-    # DuckDB query straight over the in-memory `trials_all` (pre-filter trials, with
-    # the issue #855 subject corrections already applied). Swap the FROM for
-    # read_parquet('data/processed/trials.parquet') to hit the file instead -- but
-    # then `subject_id` is the raw session-name prefix, uncorrected.
+    # Query over the in-memory `trials_all` (issue #855 subject corrections
+    # already applied). Querying `sites.parquet` directly instead would give
+    # the raw, uncorrected `subject_id`.
     _sessions_per_animal = mo.sql(
         """
         SELECT subject_id, count(DISTINCT session_id) AS n_sessions

@@ -42,15 +42,15 @@ wheels = [
 
 [[package]]
 name = "aind-behavior-vr-foraging"
-version = "1.1.2"
+version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aind-behavior-services" },
     { name = "pydantic-settings" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/79/ed4d98fe2169c49998abc25439148f20fc97a70d8b7e1e9bdd66984ddd3a/aind_behavior_vr_foraging-1.1.2.tar.gz", hash = "sha256:a4be7224b0d74e4f8e63a36c2f0e94a5f54779bf360c763bf178bf36d5c63d0d", size = 37219, upload-time = "2026-06-30T00:26:18.792Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/ef/70f1596103cc1fe90bddea9ed9de44c30be8e5ac78e400a009b5b32e3f8f/aind_behavior_vr_foraging-1.2.1.tar.gz", hash = "sha256:03dddb9eb81daa42eb24225ecb5f0e3d97e206c45f3d348adb3e5e11d2134ea8", size = 37428, upload-time = "2026-07-22T18:38:06.404Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/f7/98533b37e7491f1a1dbc266142e14df4304900e54d5db59414646031be47/aind_behavior_vr_foraging-1.1.2-py3-none-any.whl", hash = "sha256:92645fb33862b96926b1103fe83ab0dbe304900f67fcca8bde13cb056fd4ea7e", size = 51446, upload-time = "2026-06-30T00:26:16.643Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/7c/b58fd8fa2468efaa2ddc51bcdfefa1e776d608904f3ab41bfd4b063a5298/aind_behavior_vr_foraging-1.2.1-py3-none-any.whl", hash = "sha256:c8698d3d740da7d91a91fda204c71d752788a1e13294c5fa1a727116f7811e83", size = 51659, upload-time = "2026-07-22T18:38:04.52Z" },
 ]
 
 [package.optional-dependencies]
@@ -60,25 +60,23 @@ data = [
 
 [[package]]
 name = "aind-behavior-vr-foraging-packaging"
-version = "0.0.3"
+version = "0.0.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
-    { name = "aind-data-access-api" },
-    { name = "aind-data-schema" },
     { name = "aind-nwb-utils" },
     { name = "hdmf-zarr" },
-    { name = "ndx-events" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pynwb" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/25/c1d8b409f46e52692d86f552e58a7d0aa53ccba5fcb8c5a0d800c502f172/aind_behavior_vr_foraging_packaging-0.0.3.tar.gz", hash = "sha256:d46b952ff98c7aa7ee3f48ea00d95b06d8aa4f5e230cf2773cbdb120df018934", size = 26128, upload-time = "2026-07-16T18:13:57.049Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/5b/4666df90f1c7d3374a31fa326c4de33ea45bdd64806209981719e941ffbc/aind_behavior_vr_foraging_packaging-0.0.9.tar.gz", hash = "sha256:558ea782e2b29fee6f62d372bc0ee001c6ae878af4ab4bfad9632e86a50a3695", size = 299349, upload-time = "2026-08-12T15:45:32.122Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/93/c0bdc520f03c54abefb8dc34da96c3f51468114100fb1ec50f44edf1683c/aind_behavior_vr_foraging_packaging-0.0.3-py3-none-any.whl", hash = "sha256:bd6ddf11d04db43763b72d596f0ae0804b2678af6079d475545f937d3b3c943a", size = 36330, upload-time = "2026-07-16T18:13:55.926Z" },
+    { url = "https://files.pythonhosted.org/packages/21/a2/c39fd00023af0fed2e728de17c9bf8b0acc7176d4462e35b104e06f98021/aind_behavior_vr_foraging_packaging-0.0.9-py3-none-any.whl", hash = "sha256:6e02c5520c5edff4e3778f59256c8097542ba0e82641431c22653919d2bcfaee", size = 48602, upload-time = "2026-08-12T15:45:30.925Z" },
 ]
 
 [[package]]
@@ -97,37 +95,8 @@ wheels = [
 ]
 
 [[package]]
-name = "aind-data-schema"
-version = "2.8.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aind-data-schema-models" },
-    { name = "pydantic" },
-    { name = "pydantic-extra-types" },
-    { name = "tzdata" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1b/4d/6e1a5175da36d65c0467cab77bc508b7a4b9de4f27f9e6385288cdbece08/aind_data_schema-2.8.1.tar.gz", hash = "sha256:5f3dc809765bd25f27b667d1496499b1a5601c75e89e3804ccb2b0609f8ab84a", size = 960610, upload-time = "2026-06-09T16:15:45.62Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/d2/84fe4192caceb64a3f12d02d25aa3f25d7cf019d58890a24c75ab33c8791/aind_data_schema-2.8.1-py3-none-any.whl", hash = "sha256:71ea58072250719858cd8727bae3a8d974bfccd54b7e37aba21161172b54be41", size = 93863, upload-time = "2026-06-09T16:15:44.154Z" },
-]
-
-[[package]]
-name = "aind-data-schema-models"
-version = "5.7.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "importlib-resources" },
-    { name = "pydantic" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2a/4f/9b3c124c7b43bc0318b247c933ad945d0613f3f6088290db3542bbdf97fa/aind_data_schema_models-5.7.3.tar.gz", hash = "sha256:d68db456c0ce0aafa9b7f4da2f2c0e0925c724d1a4f1a509ca43e3a5f945a92c", size = 342029, upload-time = "2026-06-04T03:59:01.784Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/1a/b4706006fb390d4e64e1df6e9137683aca082e754b79d91e488c756bbf59/aind_data_schema_models-5.7.3-py3-none-any.whl", hash = "sha256:cd7c1a311338aeecfc1463ac069ef34db67f15508be17daa47d6155a00f1cbe0", size = 310756, upload-time = "2026-06-04T03:59:00.492Z" },
-]
-
-[[package]]
 name = "aind-nwb-utils"
-version = "0.2.6"
+version = "0.2.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fsspec" },
@@ -137,9 +106,9 @@ dependencies = [
     { name = "s3fs" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/f2/cf69578d86fe85a533a12f558be893408ea3531774ad4312fcd1c2460923/aind_nwb_utils-0.2.6.tar.gz", hash = "sha256:7ead270c3ece6ff3ceaeeac4e156ac9fce39659414653a9581b3c7bc589a42af", size = 39200465, upload-time = "2026-07-02T17:45:54.678Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/9f/0309c43b60837e80817191885683cbb90173d4ec38adc4303e885bd1a971/aind_nwb_utils-0.2.9.tar.gz", hash = "sha256:9530430613e05de58779c1bdda82d1f026fb49a6416aeb75c64bc8981540c355", size = 39203302, upload-time = "2026-08-11T19:32:46.159Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/4a/89f26ca1cfaccd050cd3030326f680c88007349627bf7b8face171516f81/aind_nwb_utils-0.2.6-py3-none-any.whl", hash = "sha256:5ad41e9f2b892433fc20976b722cf358041d0ef1964641def6a7336d8ba33ae5", size = 14327, upload-time = "2026-07-02T17:45:52.982Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/dc/c26b2a94d23c77aca4666645713dcb393daac8a2879b4757aba439b0c30a/aind_nwb_utils-0.2.9-py3-none-any.whl", hash = "sha256:a21dd3ef945b8d9a2bbe5f46e3234e647f1957f88fa868d44b4e67e0f4fd7f78", size = 14614, upload-time = "2026-08-11T19:32:43.442Z" },
 ]
 
 [[package]]
@@ -158,6 +127,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "polars" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -177,7 +147,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aind-behavior-vr-foraging", extras = ["data"], specifier = ">=1.1" },
-    { name = "aind-behavior-vr-foraging-packaging", specifier = "==0.0.3" },
+    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.9" },
     { name = "aind-data-access-api", specifier = ">=1.9.2" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "duckdb", specifier = ">=1.5.5" },
@@ -187,6 +157,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpy", specifier = ">=2.3.3" },
     { name = "pandas", specifier = ">=2.3.3" },
+    { name = "polars", specifier = ">=1.43.2" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -1049,15 +1020,6 @@ wheels = [
 ]
 
 [[package]]
-name = "importlib-resources"
-version = "7.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e4/06/b56dfa750b44e86157093bc8fca0ab81dccbf5260510de4eaf1cb69b5b99/importlib_resources-7.1.0.tar.gz", hash = "sha256:0722d4c6212489c530f2a145a34c0a7a3b4721bc96a15fada5930e2a0b760708", size = 44985, upload-time = "2026-04-12T16:36:09.232Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8a/db/55a262f3606bebcae07cc14095338471ad7c0bbcaa37707e6f0ee49725b7/importlib_resources-7.1.0-py3-none-any.whl", hash = "sha256:1bd7b48b4088eddb2cd16382150bb515af0bd2c70128194392725f82ad2c96a1", size = 37232, upload-time = "2026-04-12T16:36:08.219Z" },
-]
-
-[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1903,19 +1865,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ndx-events"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "hdmf" },
-    { name = "pynwb" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/87/33/13acc6bb14c0e4dfb29981764f0ca8d70b97363897612cd4756470164954/ndx_events-0.4.0.tar.gz", hash = "sha256:5af00eb7b11ae347c67a43d26c4299a4a45bdb0f5becf23eb5a5314e7f8da9e4", size = 23058, upload-time = "2025-07-23T18:03:03.927Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/ba/5632203a75780e1e6ec7bf3b8fb1575678c00a3cc024bd4659ca8a3fba46/ndx_events-0.4.0-py3-none-any.whl", hash = "sha256:87b2aae187066fe9ad036b334ccca81aac60f9b71a68bb646afc2bd0630dfb36", size = 9999, upload-time = "2025-07-23T18:03:03.185Z" },
-]
-
-[[package]]
 name = "nest-asyncio2"
 version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2193,14 +2142,14 @@ wheels = [
 
 [[package]]
 name = "polars"
-version = "1.43.1"
+version = "1.43.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "polars-runtime-32" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/79/720f4901230992f359653717e7cc3596731ed36e1a27be351d128ee0c3b7/polars-1.43.1.tar.gz", hash = "sha256:cb07ff3ad61c7b28043e6176e5fdb04a294346920b7f033deeb84116b4911883", size = 750058, upload-time = "2026-07-27T12:07:58.288Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/13/3873f213304bcbaaf39e63c8b905ceb460a0524448d57f86a829f6d4d0fd/polars-1.43.2.tar.gz", hash = "sha256:c699671b99eb71ff53334d237917aaa3db5ad4dda480abcb6c80e0eaee7b677b", size = 750312, upload-time = "2026-08-01T06:28:30.872Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/7c/d74a56d5afae8e91924aad91cba621b286a05307e88569ecab666b3055b3/polars-1.43.1-py3-none-any.whl", hash = "sha256:f6ecd9184956f46442ddfcf6185423401475bbeffea59e238de8b9ecedacf16c", size = 846844, upload-time = "2026-07-27T12:06:33.913Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/fe/0888040a24e4504098b85d8ad486b14cb01cf6b030bbe479dfc2dcffc2ac/polars-1.43.2-py3-none-any.whl", hash = "sha256:22aa0cb92a1ee2d60d6a15a638b2e8e0dd99aea21ac0cd8fb29da8e382e075a9", size = 847150, upload-time = "2026-08-01T06:27:15.543Z" },
 ]
 
 [package.optional-dependencies]
@@ -2210,18 +2159,18 @@ pyarrow = [
 
 [[package]]
 name = "polars-runtime-32"
-version = "1.43.1"
+version = "1.43.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/60/44/390c9e9eef393991d907b7067264ddaa685b550a5bab94991765459a5e64/polars_runtime_32-1.43.1.tar.gz", hash = "sha256:2931c71fce2080ade2fc743207b3d70ea659f694e0273b6bacfe551ad6ce43e0", size = 3093618, upload-time = "2026-07-27T12:07:59.492Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/06/11b578eeef05f867e3ee31b2a2fdd8e7684c2aa47822c49935d1be789c38/polars_runtime_32-1.43.2.tar.gz", hash = "sha256:d7b7c486bccee75a6af0158b87077da3d054657e3c60036b28644f4e1c7fdbf7", size = 3095669, upload-time = "2026-08-01T06:28:32.315Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/a5/72c075ff95b31807c3cf497757bdd87f81b5b8869e60a22ec532238bac99/polars_runtime_32-1.43.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:ddc7bca81e3616b74eba597bff09acbe3567e5b66798cc5305adc2e91a36e31e", size = 53084414, upload-time = "2026-07-27T12:06:36.283Z" },
-    { url = "https://files.pythonhosted.org/packages/b3/8f/a34347323459116becbc3b6223bc55b25a1be705d6064decac6b7aa0c769/polars_runtime_32-1.43.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:3bdaeb8b017be11d7d2f8a938ae98cb4135f90de451771c2bac4d21dca2f7cf4", size = 47514709, upload-time = "2026-07-27T12:06:39.63Z" },
-    { url = "https://files.pythonhosted.org/packages/83/7e/a0a22740388facc22f2faa81787b4150231a22dad42ad02b2c6efdba0d0a/polars_runtime_32-1.43.1-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:def1c19a339903ab39f1d134a69a9e8b02feb4f800f547809fbfed458ccb135e", size = 51351657, upload-time = "2026-07-27T12:06:44.701Z" },
-    { url = "https://files.pythonhosted.org/packages/34/f1/4a07318711eeb3a27c62c916751ca45f18df6b0891d18aba68ffd9c18a76/polars_runtime_32-1.43.1-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4f323e5c4aa0f068c2c911bd01f1ecdc25c1f3a501879b29550a41ab95490965", size = 57289250, upload-time = "2026-07-27T12:06:48.173Z" },
-    { url = "https://files.pythonhosted.org/packages/26/74/c6b55dbb4db2574a9478bf1c2aa04624ea924fc44dc14b64050be462db7e/polars_runtime_32-1.43.1-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:b93d4bf59dcb0bac68ab2458890f1e8431d17369e59efc88625f0d92b22cad92", size = 51505657, upload-time = "2026-07-27T12:06:51.557Z" },
-    { url = "https://files.pythonhosted.org/packages/43/2e/12e987b0f311f20e41f904acc452824af3009579d60c878a5435ae1e9f0a/polars_runtime_32-1.43.1-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:977b4620d837f3ca0d131f858ac1bd72e2ae10a5e85a6cc27fddc71fbdb5005d", size = 55189721, upload-time = "2026-07-27T12:06:54.68Z" },
-    { url = "https://files.pythonhosted.org/packages/3a/f6/5bfba6f40a08b2b1bbe0507e9cc638ebada2dceaece45f9d87a905c57de5/polars_runtime_32-1.43.1-cp310-abi3-win_amd64.whl", hash = "sha256:fa557938e9113c12d59c56df8d7f7e1a411cc1954df0dafbb05900136c6329e7", size = 52566672, upload-time = "2026-07-27T12:06:57.725Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/5e/41df901e2684e8857bdffd458c8157d237c701df9f3f922d101075f97724/polars_runtime_32-1.43.1-cp310-abi3-win_arm64.whl", hash = "sha256:cc186bad9f33b71f66ee6cc3ba2146d64315a120b0e988814d6fb1a37f0cc9e9", size = 46575356, upload-time = "2026-07-27T12:07:00.856Z" },
+    { url = "https://files.pythonhosted.org/packages/59/fc/12e6d4ca34d820297651134cfa35f86c33e898539fc6629cbb35d0089697/polars_runtime_32-1.43.2-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:91abf205d4ec93f92ba95386b7f8776559ae3dfce425ed2e527efa75d117d04a", size = 53088908, upload-time = "2026-08-01T06:27:18.268Z" },
+    { url = "https://files.pythonhosted.org/packages/32/81/833b0853551deb810854f96b43dea342b6e6c9b0ea1afcccf774157d519d/polars_runtime_32-1.43.2-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2cc3ff96fd44789b02eb5c15b98dfcb000101636b177d3034fae2feec19b118f", size = 47540529, upload-time = "2026-08-01T06:27:21.391Z" },
+    { url = "https://files.pythonhosted.org/packages/83/55/7b2a75af14c9294d97f3bec132dd3018ddcd988bef32b5d28322150b8c11/polars_runtime_32-1.43.2-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:10ed36e615ab362feb7406e6d084e124b445ad284caa73bd93ae7e65745ed894", size = 51366340, upload-time = "2026-08-01T06:27:24.776Z" },
+    { url = "https://files.pythonhosted.org/packages/62/60/64deacb3abc70c52e2d88a808a052d1621c86a48fe9194f2c065579ab1cd/polars_runtime_32-1.43.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6d5a7ae004a2723ebf4427f6d6a639f30f86af4cf077075f6b35d04711154fc3", size = 57304599, upload-time = "2026-08-01T06:27:27.875Z" },
+    { url = "https://files.pythonhosted.org/packages/52/95/d6e3a236d7630e17c40d0ddee839bf2be9acf548fdc0e5ad65ed9ff0cac6/polars_runtime_32-1.43.2-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:09339eacc6d392206e78aabbaaa37d7276eb969b798f46cb1f367fd718798c60", size = 51520580, upload-time = "2026-08-01T06:27:30.913Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/5a/2deb8eac70e9a2ac26d88a66ae7cf52612865026f4f4a5e7ab11ad9d52bf/polars_runtime_32-1.43.2-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:452b400e59e7f56e4c6437f435e796903272a9388feee12de2bea049ae87025e", size = 55204471, upload-time = "2026-08-01T06:27:33.886Z" },
+    { url = "https://files.pythonhosted.org/packages/29/9e/647401ae8a607bc0cc40ed7b8592d5b1be90ded0dc9b9d6d3aeb03f9524b/polars_runtime_32-1.43.2-cp310-abi3-win_amd64.whl", hash = "sha256:00e33c28e321410c8d66e814a90043101e3bdd9ed2c6dabda07565aa8adbbdf1", size = 52572176, upload-time = "2026-08-01T06:27:37.048Z" },
+    { url = "https://files.pythonhosted.org/packages/96/8d/60a50c3f36c85218a7ffcb48c6fe2ce1f7bec799152d68b8658ebed2179c/polars_runtime_32-1.43.2-cp310-abi3-win_arm64.whl", hash = "sha256:350a4868cae85bf8b3f81b33ba47927c15256bd9264dfc8c0753f1b927eac9d3", size = 46582513, upload-time = "2026-08-01T06:27:40.025Z" },
 ]
 
 [[package]]
@@ -2382,19 +2331,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pydantic-extra-types"
-version = "2.11.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/66/71/dba38ee2651f84f7842206adbd2233d8bbdb59fb85e9fa14232486a8c471/pydantic_extra_types-2.11.1.tar.gz", hash = "sha256:46792d2307383859e923d8fcefa82108b1a141f8a9c0198982b3832ab5ef1049", size = 172002, upload-time = "2026-03-16T08:08:03.92Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/c1/3226e6d7f5a4f736f38ac11a6fbb262d701889802595cdb0f53a885ac2e0/pydantic_extra_types-2.11.1-py3-none-any.whl", hash = "sha256:1722ea2bddae5628ace25f2aa685b69978ef533123e5638cfbddb999e0100ec1", size = 79526, upload-time = "2026-03-16T08:08:02.533Z" },
-]
-
-[[package]]
 name = "pydantic-settings"
 version = "2.14.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2446,7 +2382,7 @@ wheels = [
 
 [[package]]
 name = "pynwb"
-version = "4.0.0"
+version = "4.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2456,9 +2392,9 @@ dependencies = [
     { name = "platformdirs" },
     { name = "python-dateutil" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/00/db/45200542871844b617e77a6483cf607e95e1c62f2ecce3704efd1ead059b/pynwb-4.0.0.tar.gz", hash = "sha256:8233d7ee565fcff1d4c59689c69d8b3dab1c41ed6b1e45967a57144f099ababf", size = 36403443, upload-time = "2026-06-30T00:02:25.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/90/bd86cdd9628f415332e5f521f700ca34b602164a3a5ef80b640cdf3e2d23/pynwb-4.1.0.tar.gz", hash = "sha256:2d2672ba467826e61b14d9518866e75b6d2925ddc23c30672309bf7644ea0ed0", size = 36407506, upload-time = "2026-07-24T23:28:12.857Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/52/e8a3ee1cd6510eeeaddaaf7e51eea14b705d15c1261ed612d8bce424725c/pynwb-4.0.0-py3-none-any.whl", hash = "sha256:3b138f9d64151146ae8a7dd5ce5f82680a93447e478cfc829a0e7b4966892a93", size = 1411767, upload-time = "2026-06-30T00:02:23.806Z" },
+    { url = "https://files.pythonhosted.org/packages/77/7b/838eb069a734c7c0be53ffe899486964e3c9d9c8321905684d2a9f471699/pynwb-4.1.0-py3-none-any.whl", hash = "sha256:b0de4dd385ad9ebbbfa1825020854fc37837cab48578f137c2be100728ab2084", size = 1413186, upload-time = "2026-07-24T23:28:10.1Z" },
 ]
 
 [[package]]
