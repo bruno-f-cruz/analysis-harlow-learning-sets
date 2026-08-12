@@ -19,6 +19,15 @@ dependencies = [
     "pyarrow>=24.0.0",
     "marimo[sql]>=0.23.15",
     "duckdb>=1.5.5",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "boto3>=1.35",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "debugpy>=1.8",
 ]
 
 [tool.marimo.runtime]
