@@ -12,7 +12,9 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path, PurePath
 from typing import Any
+from urllib.parse import urlparse
 
+import boto3
 import pandas as pd
 
 
@@ -69,3 +71,40 @@ class LocalArtifactStore(ArtifactStore):
 
     def uri(self, relative_path: str) -> str:
         return str(self.root / relative_path)
+
+
+class S3ArtifactStore(ArtifactStore):
+    """Writes under ``s3://<bucket>/<prefix>/<relative_path>``."""
+
+    def __init__(self, bucket: str, prefix: str, client=None) -> None:
+        self.bucket = bucket
+        self.prefix = prefix.strip("/")
+        self._client = client or boto3.client("s3")
+
+    def _key(self, relative_path: str) -> str:
+        return f"{self.prefix}/{relative_path}"
+
+    def write_json(self, relative_path: str, data: Any) -> None:
+        body = json.dumps(data, indent=2, default=str)
+        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=body)
+
+    def write_text(self, relative_path: str, text: str) -> None:
+        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=text)
+
+    def write_parquet(self, relative_path: str, df: pd.DataFrame) -> None:
+        import io
+
+        buf = io.BytesIO()
+        df.to_parquet(buf)
+        self._client.put_object(Bucket=self.bucket, Key=self._key(relative_path), Body=buf.getvalue())
+
+    def uri(self, relative_path: str) -> str:
+        return f"s3://{self.bucket}/{self._key(relative_path)}"
+
+
+def artifact_store_for_uri(uri: str) -> ArtifactStore:
+    """Build the right ``ArtifactStore`` for a local path or an ``s3://`` URI."""
+    parsed = urlparse(uri)
+    if parsed.scheme == "s3":
+        return S3ArtifactStore(bucket=parsed.netloc, prefix=parsed.path.lstrip("/"))
+    return LocalArtifactStore(root=uri)
