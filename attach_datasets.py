@@ -21,16 +21,22 @@ Usage
     uv run attach_datasets.py --subject-ids 841299 --start-date 2026-06-01 --prune
 
 By default, newly matched sessions are ADDED to the existing attached_datasets
-list — existing entries are kept even if they'd no longer match the query,
-since detaching a dataset should be a deliberate choice. Pass --prune to
-instead replace the whole list with exactly what this query returns.
+list, and existing entries are preserved even if they no longer match the
+query (so a session that ages out of your date range stays attached until
+you explicitly prune). Caveat: if you hand-remove an entry for a session that
+still matches your query criteria, re-running this script with the same
+query will silently re-add it — there is currently no way to permanently
+exclude a still-matching session short of changing your query or using
+--prune with different criteria.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +77,23 @@ def merge(existing: list[dict], fresh: list[dict], prune: bool) -> list[dict]:
     return sorted(by_id.values(), key=lambda e: e["mount"])
 
 
+def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
+    """Write the manifest atomically so a crash mid-write can't corrupt it.
+
+    Writes to a temp file in the same directory, then replaces the target
+    via ``os.replace`` (atomic on POSIX and Windows), so ``path`` always
+    either holds the old complete content or the new complete content.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(manifest, indent=2) + "\n")
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subject-ids", nargs="+", required=True)
@@ -83,7 +106,7 @@ def main() -> None:
 
     manifest = load_manifest(MANIFEST_PATH)
     manifest["attached_datasets"] = merge(manifest["attached_datasets"], fresh_entries, args.prune)
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
+    write_manifest(MANIFEST_PATH, manifest)
 
     print(
         f"data_assets.json now has {len(manifest['attached_datasets'])} attached datasets "
