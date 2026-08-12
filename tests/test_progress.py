@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from analysis.progress import ProgressWriter
 
 
@@ -43,7 +45,7 @@ def test_error_records_message(tmp_path):
     path = tmp_path / "progress.jsonl"
     writer = ProgressWriter(path, run_id="abc123")
 
-    writer.error(stage="preprocess", message="boom")
+    writer.error("boom", stage="preprocess")
 
     event = json.loads(path.read_text().splitlines()[0])
     assert event["status"] == "error"
@@ -59,3 +61,92 @@ def test_log_writes_informational_event(tmp_path):
     event = json.loads(path.read_text().splitlines()[0])
     assert event["status"] == "info"
     assert event["message"] == "loaded 12 sessions"
+
+
+def test_failed_records_status(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    writer.failed(stage="preprocess", reason="disk full")
+
+    event = json.loads(path.read_text().splitlines()[0])
+    assert event["status"] == "failed"
+    assert event["reason"] == "disk full"
+
+
+def test_warning_records_message(tmp_path):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    writer.warning("low disk space", stage="preprocess")
+
+    event = json.loads(path.read_text().splitlines()[0])
+    assert event["status"] == "warning"
+    assert event["message"] == "low disk space"
+    assert event["stage"] == "preprocess"
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status"])
+def test_reserved_key_in_fields_raises_on_started(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.started(**{reserved_key: "spoofed"})
+
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status"])
+def test_reserved_key_in_fields_raises_on_completed(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.completed(**{reserved_key: "spoofed"})
+
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status"])
+def test_reserved_key_in_fields_raises_on_failed(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.failed(**{reserved_key: "spoofed"})
+
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status", "message"])
+def test_reserved_key_in_fields_raises_on_error(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.error("boom", **{reserved_key: "spoofed"})
+
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status", "message"])
+def test_reserved_key_in_fields_raises_on_warning(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.warning("careful", **{reserved_key: "spoofed"})
+
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("reserved_key", ["timestamp", "run_id", "status", "message"])
+def test_reserved_key_in_fields_raises_on_log(tmp_path, reserved_key):
+    path = tmp_path / "progress.jsonl"
+    writer = ProgressWriter(path, run_id="abc123")
+
+    with pytest.raises(ValueError):
+        writer.log("note", **{reserved_key: "spoofed"})
+
+    assert not path.exists()
