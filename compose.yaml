@@ -1,0 +1,39 @@
+services:
+  dev:
+    build:
+      context: .
+    volumes:
+      - .:/workspace
+      - ./artifacts:/artifacts
+    ports:
+      - "2718:2718"
+      - "8080:8080"
+    working_dir: /workspace
+    environment:
+      - DATASET_URI=${DATASET_URI:-}
+      - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+      # Reading input session data needs NO AWS credentials at all — it's the
+      # public aind-open-data bucket, accessed unsigned (see analysis.io).
+      # Credentials only matter if ARTIFACT_URI points at a private S3 bucket
+      # for writing outputs; if so they come from the host's normal credential
+      # chain — never hardcode keys here. Uncomment locally if needed and not
+      # using SSO/instance roles:
+      # - AWS_ACCESS_KEY_ID
+      # - AWS_SECRET_ACCESS_KEY
+    stdin_open: true
+    tty: true
+
+  analysis:
+    build:
+      context: .
+    volumes:
+      - .:/workspace
+      - ./artifacts:/artifacts
+    environment:
+      - DATASET_URI=${DATASET_URI:-}
+      - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+    working_dir: /workspace
+    command: ["uv", "run", "python", "workflows/pipeline.py"]
+    profiles: ["run"]
