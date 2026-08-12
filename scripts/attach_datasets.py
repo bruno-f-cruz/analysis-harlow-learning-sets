@@ -11,7 +11,7 @@
 (see ``src/analysis/preprocessing.py``) -- it's not what
 ``workflows/pipeline.py`` reads (that's ``data_assets.json``, which just
 points at the processed dataset). To regenerate: sync these locations to
-local disk, then run ``uv run python process_sessions.py --force --upload``.
+local disk, then run ``uv run python scripts/process_sessions.py --force --upload``.
 
 Uses ``version="v2"`` since these sessions are on the newer aind-data-schema
 layout, where the default ``"v1"`` returns nothing and the timestamp field
@@ -19,8 +19,8 @@ moved from ``session.session_start_time`` to
 ``acquisition.acquisition_start_time``. ``data_description.data_level: "raw"``
 excludes derived/processed assets.
 
-Self-contained PEP 723 script -- ``uv run attach_datasets.py`` builds its own
-env, independent of this repo's uv.lock/.venv.
+Self-contained PEP 723 script -- ``uv run scripts/attach_datasets.py`` builds
+its own env, independent of this repo's uv.lock/.venv.
 
 ``SUBJECT_IDS``/``START_DATE`` below are hard-coded rather than CLI flags --
 edit and re-run to change what's attached.
@@ -29,8 +29,8 @@ Usage
 -----
 ::
 
-    uv run attach_datasets.py
-    uv run attach_datasets.py --prune   # replace the list instead of merging
+    uv run scripts/attach_datasets.py
+    uv run scripts/attach_datasets.py --prune   # replace the list instead of merging
 
 New matches are added to the existing list; stale entries are kept until
 `--prune`. Caveat: re-running with the same query silently re-adds a
@@ -50,7 +50,7 @@ from typing import Any
 from aind_data_access_api.document_db import MetadataDbClient
 
 API_GATEWAY_HOST = "api.allenneuraldynamics.org"
-MANIFEST_PATH = Path(__file__).parent / "raw_sessions.json"
+MANIFEST_PATH = Path(__file__).resolve().parent.parent / "raw_sessions.json"
 _PROJECTION = {"name": 1, "location": 1, "subject.subject_id": 1}
 
 # Hard-coded selection criteria — same animals/cutoff date the notebook's

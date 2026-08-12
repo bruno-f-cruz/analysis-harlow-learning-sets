@@ -1,11 +1,11 @@
-"""Unit tests for the root-level ``attach_datasets.py`` ops script.
+"""Unit tests for the ``scripts/attach_datasets.py`` ops script.
 
-``attach_datasets.py`` lives at the repo root, outside the ``analysis``
-package, and starts with a PEP 723 ``# /// script`` header — that header is
-just a comment block to Python, so it doesn't interfere with a normal
-import. We load the module dynamically via ``importlib`` rather than adding
-the repo root to ``sys.path``, to avoid any chance of shadowing/clobbering
-other top-level modules during the test session.
+It lives outside the ``analysis`` package and starts with a PEP 723
+``# /// script`` header — that header is just a comment block to Python, so
+it doesn't interfere with a normal import. We load the module dynamically
+via ``importlib`` rather than adding ``scripts/`` to ``sys.path``, to avoid
+any chance of shadowing/clobbering other top-level modules during the test
+session.
 
 Only the pure functions (``build_entries``, ``merge``) are covered here.
 ``query_sessions`` requires live network/DocDB access and ``main`` is a
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 
-_MODULE_PATH = Path(__file__).parent.parent / "attach_datasets.py"
+_MODULE_PATH = Path(__file__).parent.parent / "scripts" / "attach_datasets.py"
 _spec = importlib.util.spec_from_file_location("attach_datasets", _MODULE_PATH)
 attach_datasets = importlib.util.module_from_spec(_spec)
 sys.modules["attach_datasets"] = attach_datasets

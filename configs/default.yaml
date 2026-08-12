@@ -3,7 +3,7 @@ artifact_uri: "./artifacts"          # overridden by $ARTIFACT_URI; s3://bucket/
 aws_region: "us-west-2"              # overridden by $AWS_REGION
 
 # Which sessions are analyzed is NOT configured here — see data_assets.json
-# (repo root) and attach_datasets.py.
+# (repo root) and scripts/attach_datasets.py.
 
 processing:
   with_position_velocity: false

@@ -143,9 +143,8 @@ def build_attached_dataset_entries(
 
 
 def load_attached_datasets(path: Path | str = "data_assets.json") -> List[Dict[str, Any]]:
-    """Read the repo's ``data_assets.json`` — the durable declaration of which
-    sessions this analysis currently targets (refreshed via ``attach_datasets.py``,
-    not by any live query at run time).
+    """Read the repo's ``data_assets.json`` — the durable declaration of what
+    this analysis reads, not resolved via any live query at run time.
     """
     path = Path(path)
     if not path.exists():

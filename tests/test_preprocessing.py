@@ -16,7 +16,7 @@ def test_default_data_dir_resolves_to_repo_root_data(monkeypatch):
     monkeypatch.setattr(
         preprocessing, "process_all", lambda data_root, **kw: captured.update(data_root=data_root)
     )
-    monkeypatch.setattr(sys, "argv", ["process_sessions.py"])
+    monkeypatch.setattr(sys, "argv", ["scripts/process_sessions.py"])
 
     preprocessing.main()
 

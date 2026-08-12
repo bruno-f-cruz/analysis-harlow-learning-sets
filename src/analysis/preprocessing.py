@@ -12,10 +12,10 @@ Usage
 -----
 ::
 
-    uv run python process_sessions.py
-    uv run python process_sessions.py --force
-    uv run python process_sessions.py --exclude-processors licks position_velocity
-    uv run python process_sessions.py --upload   # sync data/processed/ to the scratch bucket
+    uv run python scripts/process_sessions.py
+    uv run python scripts/process_sessions.py --force
+    uv run python scripts/process_sessions.py --exclude-processors licks position_velocity
+    uv run python scripts/process_sessions.py --upload   # sync data/processed/ to the scratch bucket
 
 Tables written (``data/processed/``)
 -------------------------------------

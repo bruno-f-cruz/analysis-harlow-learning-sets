@@ -43,7 +43,7 @@ Open this repository in GitHub Codespaces. It uses the same devcontainer (`.devc
 
 ## What gets analyzed — `data_assets.json`
 
-The repo root has a git-tracked `data_assets.json` (a Code-Ocean-style `attached_datasets` list of `{id, mount, location}` entries) that pins exactly what this analysis reads. Unlike the raw-session model this used to follow, it now holds a *single* entry: the already-processed dataset (`session.parquet` + `sites.parquet`, built by `process_sessions.py`) sitting in the scratch bucket. `workflows/pipeline.py` mounts that location directly — no local sync, no local re-processing, no DocDB query at run time.
+The repo root has a git-tracked `data_assets.json` (a Code-Ocean-style `attached_datasets` list of `{id, mount, location}` entries) that pins exactly what this analysis reads. Unlike the raw-session model this used to follow, it now holds a *single* entry: the already-processed dataset (`session.parquet` + `sites.parquet`, built by `scripts/process_sessions.py`) sitting in the scratch bucket. `workflows/pipeline.py` mounts that location directly — no local sync, no local re-processing, no DocDB query at run time.
 
 ```json
 {"version": 1, "attached_datasets": [{"id": "harlow-experiment-processed", "mount": "processed", "location": "s3://aind-scratch-data/vr-foraging/harlow-experiments/harlow-experiment"}]}
@@ -58,17 +58,17 @@ Most of the time you don't need this — you're just reading the already-process
 1. **Pin which raw sessions to use** — `raw_sessions.json` (git-tracked) is the durable record of which raw `aind-open-data` sessions feed the processed dataset, refreshed via:
 
    ```bash
-   uv run attach_datasets.py
+   uv run scripts/attach_datasets.py
    # --prune replaces the whole list instead of merging into it:
-   uv run attach_datasets.py --prune
+   uv run scripts/attach_datasets.py --prune
    ```
 
-   Which animals/dates to query are hard-coded constants at the top of `attach_datasets.py` (`SUBJECT_IDS`/`START_DATE`) rather than CLI flags — edit those directly when you need to change them. It queries the DocDB via `version="v2"` (the default `"v1"` returns nothing for these sessions — they're indexed under the newer aind-data-schema layout, where the timestamp field also moved from `session.session_start_time` to `acquisition.acquisition_start_time`), filtered to `data_description.data_level: "raw"` so derived/processed assets are excluded. By default, newly matched sessions are *added* to the existing list; existing entries are kept even if they no longer match the query.
+   Which animals/dates to query are hard-coded constants at the top of `scripts/attach_datasets.py` (`SUBJECT_IDS`/`START_DATE`) rather than CLI flags — edit those directly when you need to change them. It queries the DocDB via `version="v2"` (the default `"v1"` returns nothing for these sessions — they're indexed under the newer aind-data-schema layout, where the timestamp field also moved from `session.session_start_time` to `acquisition.acquisition_start_time`), filtered to `data_description.data_level: "raw"` so derived/processed assets are excluded. By default, newly matched sessions are *added* to the existing list; existing entries are kept even if they no longer match the query.
 
 2. **Sync those raw sessions to local disk and process them**, then upload the result:
 
    ```bash
-   uv run python process_sessions.py --force --upload
+   uv run python scripts/process_sessions.py --force --upload
    ```
 
    See `src/analysis/preprocessing.py`'s module docstring for the full flag list (`--exclude-processors`, etc.). `data_assets.json`'s location should already point at the same scratch-bucket path `--upload` writes to; update it if you changed the destination. Unlike every read in this repo, `--upload` needs real AWS credentials — see below.
@@ -81,7 +81,7 @@ Most of the time you don't need this — you're just reading the already-process
 
 Every *read* in this repo is public/unsigned: the raw `aind-open-data` sessions and the processed dataset in `aind-scratch-data` both allow anonymous access — `workflows/pipeline.py` (Polars, via `storage_options={"skip_signature": "true"}`) and `analysis.io.build_inputs_manifest`/`list_open_data_sessions` (boto3, via `Config(signature_version=UNSIGNED)`) never need credentials to read either bucket.
 
-Credentials only come into play for *writes*: `process_sessions.py --upload` (writing the processed dataset to the scratch bucket — not anonymous even though reading it is), or `ARTIFACT_URI` pointed at a private S3 bucket for writing run outputs in production. Both cases use the standard AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo. This repo currently exercises only the local-filesystem artifact-store path end-to-end for run *outputs* (`ARTIFACT_URI=./artifacts`); `S3ArtifactStore` exists and is unit-tested but isn't wired to a real output bucket yet.
+Credentials only come into play for *writes*: `scripts/process_sessions.py --upload` (writing the processed dataset to the scratch bucket — not anonymous even though reading it is), or `ARTIFACT_URI` pointed at a private S3 bucket for writing run outputs in production. Both cases use the standard AWS SDK credential chain (local `~/.aws/config`, or an IAM instance role on EC2) — never keys in the repo. This repo currently exercises only the local-filesystem artifact-store path end-to-end for run *outputs* (`ARTIFACT_URI=./artifacts`); `S3ArtifactStore` exists and is unit-tested but isn't wired to a real output bucket yet.
 
 ## Run artifacts & provenance
 
@@ -102,7 +102,7 @@ git clone <repo> && cd <repo>
 docker compose up -d
 ```
 
-Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `process_sessions.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
+Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/process_sessions.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
 
 ```bash
 ssh -L 2718:localhost:2718 -L 8080:localhost:8080 user@ec2-host

@@ -124,7 +124,7 @@ def run_setup(
 @app.cell
 def selection(load_attached_datasets, build_inputs_manifest, store, progress, Path):
     # data_assets.json points at the already-processed dataset (see
-    # attach_datasets.py/process_sessions.py to regenerate it).
+    # scripts/attach_datasets.py and scripts/process_sessions.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
     store.write_json("selection.json", {"attached_datasets": attached})
 
