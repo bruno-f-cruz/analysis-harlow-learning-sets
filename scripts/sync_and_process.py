@@ -1,8 +1,9 @@
 """Sync raw sessions from raw_sessions.json and (re)build the processed dataset.
 
 1. Download every raw session listed in ``raw_sessions.json`` (refreshed via
-   ``scripts/attach_datasets.py``) to ``data/raw/`` via ``aws s3 sync`` --
-   idempotent, so already-downloaded sessions are skipped.
+   ``scripts/attach_datasets.py``) to ``data/raw/`` via ``aws s3 sync``
+   (``MAX_CONCURRENT_SYNCS`` at a time) -- idempotent, so already-downloaded
+   sessions are skipped.
 2. Run every processor except ``sniffing`` on each session
    (``aind_behavior_vr_foraging_packaging.export_pipeline.process_sessions``),
    then aggregate ``sites``/``session`` into flat, all-sessions Parquet files
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import logging
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from aind_behavior_vr_foraging_packaging.export_pipeline import (
@@ -44,6 +46,11 @@ SCRATCH_PREFIX = "vr-foraging/harlow-experiments/harlow-experiment"
 
 #: This analysis doesn't use sniffing.
 EXCLUDE_PROCESSORS = ["sniffing"]
+
+#: Each aws_sync call pays fixed CLI-startup + S3-listing overhead (~2s even
+#: for a no-op sync) that's otherwise fully additive across sessions; running
+#: a handful concurrently lets that overhead overlap instead of stacking.
+MAX_CONCURRENT_SYNCS = 4
 
 
 def check_aws_cli_exists() -> None:
@@ -68,6 +75,10 @@ def aws_sync(src: str, dst: str, *, no_sign_request: bool = False) -> None:
     this repeatedly (e.g. for sessions already downloaded) is idempotent.
     Behavior videos are always excluded -- this analysis doesn't use them.
 
+    ``--no-progress``/``--only-show-errors`` matter for more than tidy output:
+    without them the CLI's live progress renderer dominates the runtime even
+    on a no-op sync (measured ~5x slower on an already-fully-synced session).
+
     Parameters
     ----------
     no_sign_request:
@@ -75,9 +86,12 @@ def aws_sync(src: str, dst: str, *, no_sign_request: bool = False) -> None:
         Required for public buckets (e.g. ``aind-open-data``) when no AWS
         credentials with access to the bucket are configured.
     """
-    check_aws_cli_exists()
-
-    cmd = ["aws", "s3", "sync", src, dst, "--exclude", "Behavior-Videos/*"]
+    cmd = [
+        "aws", "s3", "sync", src, dst,
+        "--exclude", "Behavior-Videos/*",
+        "--no-progress",
+        "--only-show-errors",
+    ]
     if no_sign_request:
         cmd.append("--no-sign-request")
 
@@ -94,6 +108,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    check_aws_cli_exists()  # once per run, not once per session -- ~0.9s per subprocess spawn
+
     entries = load_attached_datasets(RAW_MANIFEST_PATH)
     if not entries:
         raise SystemExit(
@@ -101,8 +117,15 @@ def main() -> None:
             "scripts/attach_datasets.py first."
         )
 
-    for entry in entries:
-        aws_sync(entry["location"], str(RAW_DIR / entry["mount"]), no_sign_request=True)
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SYNCS) as executor:
+        futures = [
+            executor.submit(
+                aws_sync, entry["location"], str(RAW_DIR / entry["mount"]), no_sign_request=True
+            )
+            for entry in entries
+        ]
+        for future in futures:
+            future.result()  # re-raise on the first sync failure
 
     to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
     process_sessions(

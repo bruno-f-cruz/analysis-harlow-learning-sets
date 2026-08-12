@@ -49,6 +49,8 @@ def test_aws_sync_builds_the_expected_command(monkeypatch):
         "/local/dest",
         "--exclude",
         "Behavior-Videos/*",
+        "--no-progress",
+        "--only-show-errors",
     ]
     assert captured["kw"] == {"check": True}
 
@@ -130,17 +132,19 @@ def stubs(monkeypatch):
 
 
 def test_syncs_every_raw_session_unsigned(manifest, stubs):
+    # Sessions sync concurrently (see MAX_CONCURRENT_SYNCS), so call order
+    # across sessions isn't guaranteed -- compare as a set.
     sync_and_process.main()
 
     raw_syncs = [c for c in stubs["sync"] if c["src"].startswith("s3://aind-open-data")]
-    assert [c["src"] for c in raw_syncs] == [
+    assert {c["src"] for c in raw_syncs} == {
         "s3://aind-open-data/841299_2026-06-05_19-13-19",
         "s3://aind-open-data/841312_2026-06-04_20-19-36",
-    ]
-    assert [c["dst"] for c in raw_syncs] == [
+    }
+    assert {c["dst"] for c in raw_syncs} == {
         str(sync_and_process.RAW_DIR / "841299_2026-06-05_19-13-19"),
         str(sync_and_process.RAW_DIR / "841312_2026-06-04_20-19-36"),
-    ]
+    }
     assert all(c["no_sign_request"] is True for c in raw_syncs)
 
 
