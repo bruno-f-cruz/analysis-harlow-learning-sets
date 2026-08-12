@@ -19,6 +19,8 @@ time (except ``trials``, which is one row per site) and stamps provenance
 
 Usage
 -----
+This module backs the ``process_sessions.py`` CLI shim at the repo root, and
+can also be run directly (``uv run python -m analysis.preprocessing``).
 ::
 
     uv run python process_sessions.py                # trials + sessions only
