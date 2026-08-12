@@ -1,5 +1,3 @@
-import os
-
 from analysis.config import load_config
 
 
