@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from analysis.run import generate_run_id, build_manifest
+from analysis.run import generate_run_id, build_manifest, host_info
 
 
 def test_generate_run_id_matches_expected_format():
@@ -67,3 +67,10 @@ def test_build_manifest_rejects_reserved_key_in_extra():
             python_version="3.13.0",
             extra={"status": "clobbered"},
         )
+
+
+def test_host_info_returns_hostname_and_python_version():
+    info = host_info()
+    assert set(info.keys()) == {"hostname", "python_version"}
+    assert info["hostname"]
+    assert info["python_version"]

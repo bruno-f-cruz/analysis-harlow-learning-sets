@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import platform
+import socket
+import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
@@ -85,3 +88,29 @@ def build_manifest(
     if extra:
         manifest.update(extra)
     return manifest
+
+
+def git_commit() -> str | None:
+    """Current git commit hash, or ``None`` if unavailable (e.g. no ``.git``)."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def git_is_dirty() -> bool | None:
+    """Whether the working tree has uncommitted changes, or ``None`` if unavailable."""
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL
+        )
+        return bool(status.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def host_info() -> dict[str, str]:
+    """Hostname and Python version for the current environment."""
+    return {"hostname": socket.gethostname(), "python_version": platform.python_version()}
