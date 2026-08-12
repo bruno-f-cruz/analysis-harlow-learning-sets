@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping, Sequence
 
 import boto3
 from aind_data_access_api.document_db import MetadataDbClient
@@ -122,3 +122,20 @@ def list_open_data_sessions(
         start_date,
     )
     return sorted(uris)
+
+
+def build_attached_dataset_entries(
+    records: Sequence[Mapping[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Map raw DocDB session records into the ``data_assets.json`` entry shape
+    (``id``/``mount``/``location``), sorted by mount name for stable git diffs.
+
+    ``mount`` mirrors the local session directory naming (``<subject>_<date>_<time>``,
+    i.e. the record's ``name``) so the attachment file reads like a Code Ocean
+    ``attached_datasets`` list — a human can tell what's attached at a glance.
+    """
+    entries = [
+        {"id": str(record["_id"]), "mount": record["name"], "location": record["location"]}
+        for record in records
+    ]
+    return sorted(entries, key=lambda entry: entry["mount"])
