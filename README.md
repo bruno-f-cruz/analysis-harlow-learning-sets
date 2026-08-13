@@ -22,7 +22,7 @@ Open `http://localhost:2718` to explore the pipeline/analysis interactively.
 Either of these are equivalent:
 
 ```bash
-docker compose run --rm analysis
+docker compose run --rm prod
 # or, without Docker:
 uv run python workflows/pipeline.py
 # or, via the documented entrypoint shim:
@@ -101,7 +101,7 @@ A completed run is never modified. To reproduce a past run, inspect its `manifes
 
 ```bash
 git clone <repo> && cd <repo>
-docker compose up -d
+docker compose up -d prod
 ```
 
 Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/sync_and_process.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
