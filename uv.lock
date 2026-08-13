@@ -60,7 +60,7 @@ data = [
 
 [[package]]
 name = "aind-behavior-vr-foraging-packaging"
-version = "0.0.10"
+version = "0.0.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
@@ -74,9 +74,9 @@ dependencies = [
     { name = "pynwb" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/33/78bb4ee6bc8f1840d3554fd7b91f91b0e2dff3f8b088a602e11dda3713d2/aind_behavior_vr_foraging_packaging-0.0.10.tar.gz", hash = "sha256:40a991ba4c39609a5fc364001354f93821f5b9b187ceec64f87d06468c3165aa", size = 299443, upload-time = "2026-08-12T21:57:10.025Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/c9/a18844fd802f71f4603555c46f7a945ace18effc1c98ab7fcf513bdca735/aind_behavior_vr_foraging_packaging-0.0.11.tar.gz", hash = "sha256:ec8e848979450fe14c77f362bf130d62325a151f59fc0144ff3fcd79fba84f46", size = 299836, upload-time = "2026-08-13T00:15:20.642Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/9d/2a3280c6c8de554c995e45d575b0eac76862959f6081a48d676293c01bf1/aind_behavior_vr_foraging_packaging-0.0.10-py3-none-any.whl", hash = "sha256:1fc50f1d50c11acc1f2ec6771503e974ae9dd439faccf2c174206b69bd8bc9bc", size = 48625, upload-time = "2026-08-12T21:57:08.901Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/30/112e87bf7ef901dbfb35bbfd36660758a42061b1afa8f099721928a53a45/aind_behavior_vr_foraging_packaging-0.0.11-py3-none-any.whl", hash = "sha256:35ba8fe3731d90ef3425ccead60d23262ad64753d352c3b805abacecdb029e3a", size = 48669, upload-time = "2026-08-13T00:15:19.377Z" },
 ]
 
 [[package]]
@@ -147,7 +147,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aind-behavior-vr-foraging", extras = ["data"], specifier = ">=1.1" },
-    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.10" },
+    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.11" },
     { name = "aind-data-access-api", specifier = ">=1.9.2" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "duckdb", specifier = ">=1.5.5" },
