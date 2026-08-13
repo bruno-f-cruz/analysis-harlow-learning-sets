@@ -8,7 +8,7 @@ ARTIFACT_URI="${ARTIFACT_URI:-/artifacts}"
 
 # Generate a run ID here so both the pipeline and the dashboard point at the
 # same progress.jsonl from the start.
-export RUN_ID="${RUN_ID:-$(uv run python -c 'from analysis.run import generate_run_id; print(generate_run_id())'")}"
+export RUN_ID="${RUN_ID:-$(uv run python -c 'from analysis.run import generate_run_id; print(generate_run_id())')}"
 export PROGRESS_PATH="${ARTIFACT_URI}/runs/${RUN_ID}/progress.jsonl"
 
 echo ""
