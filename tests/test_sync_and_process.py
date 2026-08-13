@@ -186,7 +186,29 @@ def test_processes_the_locally_synced_session_dirs(manifest, stubs):
         "exclude_processors": ["sniffing"],
         "write_nwb": False,
         "clean": False,
+        "max_workers": 4,
     }
+
+
+def test_skips_processing_when_already_built(manifest, stubs):
+    sync_and_process.PROCESSED_DIR.mkdir(parents=True)
+    (sync_and_process.PROCESSED_DIR / "session.parquet").touch()
+
+    sync_and_process.main()
+
+    assert stubs["process"] == []
+    assert stubs["aggregate"] == []
+
+
+def test_force_process_flag_rebuilds_even_if_already_built(manifest, stubs, monkeypatch):
+    sync_and_process.PROCESSED_DIR.mkdir(parents=True)
+    (sync_and_process.PROCESSED_DIR / "session.parquet").touch()
+    monkeypatch.setattr(sys, "argv", ["sync_and_process.py", "--force-process"])
+
+    sync_and_process.main()
+
+    assert len(stubs["process"]) == 1
+    assert len(stubs["aggregate"]) == 1
 
 
 def test_aggregates_sites_and_session_without_cleanup(manifest, stubs):

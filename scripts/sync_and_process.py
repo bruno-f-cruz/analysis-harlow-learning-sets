@@ -10,7 +10,9 @@
 2. Run every processor except ``sniffing`` on each session
    (``aind_behavior_vr_foraging_packaging.export_pipeline.process_sessions``),
    then aggregate ``sites``/``session`` into flat, all-sessions Parquet files
-   at ``data/processed/`` (``export_pipeline.aggregate``).
+   at ``data/processed/`` (``export_pipeline.aggregate``). Skipped entirely
+   when ``data/processed/session.parquet`` already exists -- pass
+   ``--force-process`` to rebuild anyway.
 3. With ``--upload``, sync ``data/processed/`` to the scratch bucket
    ``data_assets.json`` points at.
 
@@ -110,6 +112,12 @@ def main() -> None:
         help="Re-run aws s3 sync even for sessions whose local directory already "
         "exists (by default, an existing directory is assumed complete and skipped).",
     )
+    parser.add_argument(
+        "--force-process",
+        action="store_true",
+        help="Rebuild data/processed/ even if it already exists (by default, an "
+        "existing data/processed/session.parquet means processing is skipped).",
+    )
     args = parser.parse_args()
 
     check_aws_cli_exists()  # once per run, not once per session -- ~0.9s per subprocess spawn
@@ -127,24 +135,32 @@ def main() -> None:
             continue
         aws_sync(entry["location"], str(dest), no_sign_request=True)
 
-    to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
-    process_sessions(
-        to_process,
-        PROCESSED_DIR,
-        exclude_processors=EXCLUDE_PROCESSORS,
-        write_nwb=False,
-        clean=False,
-    )
-    aggregate(
-        PROCESSED_DIR / "sessions",
-        PROCESSED_DIR,
-        Aggregator(
-            rules=[
-                AggregationRule("sites", cleanup=False),
-                AggregationRule("session", cleanup=False),
-            ]
-        ),
-    )
+    if (PROCESSED_DIR / "session.parquet").exists() and not args.force_process:
+        logging.info(
+            "%s already exists -- skipping process_sessions/aggregate "
+            "(pass --force-process to rebuild).",
+            PROCESSED_DIR / "session.parquet",
+        )
+    else:
+        to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
+        process_sessions(
+            to_process,
+            PROCESSED_DIR,
+            exclude_processors=EXCLUDE_PROCESSORS,
+            write_nwb=False,
+            clean=False,
+            max_workers=4,
+        )
+        aggregate(
+            PROCESSED_DIR / "sessions",
+            PROCESSED_DIR,
+            Aggregator(
+                rules=[
+                    AggregationRule("sites", cleanup=False),
+                    AggregationRule("session", cleanup=False),
+                ]
+            ),
+        )
 
     if args.upload:
         aws_sync(str(PROCESSED_DIR), f"s3://{SCRATCH_BUCKET}/{SCRATCH_PREFIX}")
