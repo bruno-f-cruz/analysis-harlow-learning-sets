@@ -1,0 +1,6 @@
+# Ensure shell scripts always have LF line endings in the working tree,
+# regardless of the host OS (prevents "set: pipefail\r" errors inside containers).
+*.sh text eol=lf
+
+# Standard auto-normalization for everything else
+* text=auto

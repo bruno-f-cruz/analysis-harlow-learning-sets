@@ -1,0 +1,34 @@
+services:
+  dev:
+    build:
+      context: .
+    volumes:
+      - .:/workspace
+      - /workspace/.venv
+      - ./artifacts:/artifacts
+    ports:
+      - "2718:2718"
+    working_dir: /workspace
+    environment:
+      - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+      # Reads need no credentials (public buckets). Writes (ARTIFACT_URI to a
+      # private bucket, or --upload) use the host's normal credential chain.
+      # Uncomment if not using SSO/instance roles:
+      # - AWS_ACCESS_KEY_ID
+      # - AWS_SECRET_ACCESS_KEY
+    stdin_open: true
+    tty: true
+
+  prod:
+    build:
+      context: .
+    volumes:
+      - .:/workspace
+      - /workspace/.venv
+      - ./artifacts:/artifacts
+    environment:
+      - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+    working_dir: /workspace
+    command: ["bash", "scripts/start_prod.sh"]

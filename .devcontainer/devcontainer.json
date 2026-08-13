@@ -1,0 +1,28 @@
+{
+  "name": "analysis-harlow-learning-sets",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [2718, 8080],
+  "portsAttributes": {
+    "2718": { "label": "marimo", "onAutoForward": "notify" },
+    "8080": { "label": "progress dashboard", "onAutoForward": "notify" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  },
+  "postCreateCommand": "uv sync --locked",
+  "postStartCommand": "uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718 &"
+}
