@@ -22,7 +22,7 @@ Open `http://localhost:2718` to explore the pipeline/analysis interactively.
 Either of these are equivalent:
 
 ```bash
-docker compose run --rm prod
+docker compose run --rm --service-ports prod
 # or, without Docker:
 uv run python workflows/pipeline.py
 # or, via the documented entrypoint shim:
