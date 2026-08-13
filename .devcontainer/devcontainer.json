@@ -23,6 +23,6 @@
       }
     }
   },
-  "postCreateCommand": "uv sync --locked",
-  "postStartCommand": "uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718 &"
+  "postCreateCommand": "cd /workspace && uv sync --locked",
+  "postStartCommand": "cd /workspace && nohup uv run marimo edit workflows/pipeline.py --host 0.0.0.0 --port 2718 > /tmp/marimo.log 2>&1 &"
 }
