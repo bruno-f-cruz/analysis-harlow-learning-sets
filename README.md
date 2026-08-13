@@ -22,24 +22,18 @@ Open `http://localhost:2718` to explore the pipeline/analysis interactively.
 Either of these are equivalent:
 
 ```bash
-docker compose run --rm --service-ports prod
+docker compose up prod
 # or, without Docker:
 uv run python workflows/pipeline.py
 # or, via the documented entrypoint shim:
 uv run python scripts/run.py
 ```
 
-## Progress dashboard
-
-```bash
-PROGRESS_PATH=artifacts/runs/<run_id>/progress.jsonl uv run uvicorn server.app:app --host 0.0.0.0 --port 8080
-```
-
-Open `http://localhost:8080` for a live-polling view of the current run's status and recent events (`GET /api/status`, `GET /api/events` back it). State is derived entirely from `progress.jsonl` — restarting the server (or the container) doesn't lose it.
+`docker compose up prod` uses `scripts/start_prod.sh`, which generates the `run_id`, pre-creates the run directory, and tees all stdout/stderr to `out.log` there while still printing to the terminal.
 
 ## Codespaces
 
-Open this repository in GitHub Codespaces. It uses the same devcontainer (`.devcontainer/devcontainer.json`) as local VS Code — ports `2718` (marimo) and `8080` (progress dashboard) auto-forward. All the commands above work identically.
+Open this repository in GitHub Codespaces. It uses the same devcontainer (`.devcontainer/devcontainer.json`) as local VS Code — port `2718` (marimo) auto-forwards. All the commands above work identically.
 
 ## What gets analyzed — `data_assets.json`
 
@@ -92,7 +86,8 @@ Every run gets an immutable `run_id` (`<UTC timestamp>-<suffix>`) and writes to 
 - `manifest.json` — run identity/provenance: git commit, container image, python version, status, timestamps
 - `selection.json` — the exact `data_assets.json` content this run used
 - `inputs.json` — every object under the processed dataset's location, with size/etag, resolved before processing starts
-- `progress.jsonl` — the append-only event log the dashboard reads
+- `out.log` — full stdout/stderr of the pipeline run (written by `scripts/start_prod.sh` via `tee`; not present for local `uv run` invocations)
+- `figures/` — saved plots
 - `results/` — analysis outputs
 
 A completed run is never modified. To reproduce a past run, inspect its `manifest.json`/`selection.json`/`inputs.json` — they pin exactly what code, config, sessions, and S3 objects were used.
@@ -104,10 +99,10 @@ git clone <repo> && cd <repo>
 docker compose up -d prod
 ```
 
-Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/sync_and_process.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing `2718`/`8080` publicly — prefer an SSH tunnel:
+Input reads need no AWS role at all (see AWS credentials above). If writing artifacts to S3, or running `scripts/sync_and_process.py --upload`, attach an IAM instance role scoped to that bucket. Avoid exposing port `2718` publicly — prefer an SSH tunnel:
 
 ```bash
-ssh -L 2718:localhost:2718 -L 8080:localhost:8080 user@ec2-host
+ssh -L 2718:localhost:2718 user@ec2-host
 ```
 
 ## Testing

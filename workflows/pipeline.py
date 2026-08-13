@@ -60,8 +60,7 @@ def imports_pathlib():
 
 @app.cell
 def imports_provenance():
-    from analysis.artifacts import artifact_store_for_uri, LocalArtifactStore
-    from analysis.progress import ProgressWriter
+    from analysis.artifacts import artifact_store_for_uri
     from analysis.run import (
         generate_run_id,
         build_manifest,
@@ -75,8 +74,6 @@ def imports_provenance():
 
     return (
         artifact_store_for_uri,
-        LocalArtifactStore,
-        ProgressWriter,
         generate_run_id,
         build_manifest,
         git_commit,
@@ -94,10 +91,7 @@ def imports_provenance():
 def run_setup(
     generate_run_id,
     artifact_store_for_uri,
-    LocalArtifactStore,
-    ProgressWriter,
     os,
-    Path,
     datetime,
     timezone,
 ):
@@ -108,24 +102,12 @@ def run_setup(
     started_at = datetime.now(timezone.utc).isoformat()
     artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
     store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
-    # `store.uri(...)` returns a plain filesystem path for LocalArtifactStore but
-    # an "s3://..." string for S3ArtifactStore -- ProgressWriter always opens a
-    # real filesystem Path to append to, so this only works when the artifact
-    # store is local. Guard loudly instead of silently writing progress.jsonl
-    # under a bogus local "s3:" directory when ARTIFACT_URI points at S3.
-    if not isinstance(store, LocalArtifactStore):
-        raise NotImplementedError(
-            "progress.jsonl currently requires a local artifact store; "
-            "S3-backed progress tracking isn't implemented yet"
-        )
-    progress_path = Path(store.uri("progress.jsonl"))
-    progress = ProgressWriter(progress_path, run_id=run_id)
-    progress.started(stage="run")
-    return run_id, started_at, store, progress, progress_path
+    print(f"[run] run_id={run_id}  artifacts → {artifact_uri}/runs/{run_id}")
+    return run_id, started_at, store
 
 
 @app.cell
-def selection(load_attached_datasets, build_inputs_manifest, store, progress, Path):
+def selection(load_attached_datasets, build_inputs_manifest, store, Path):
     # data_assets.json points at the already-processed dataset (see
     # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
@@ -133,7 +115,7 @@ def selection(load_attached_datasets, build_inputs_manifest, store, progress, Pa
 
     inputs = build_inputs_manifest([entry["location"] for entry in attached])
     store.write_json("inputs.json", inputs)
-    progress.log(f"resolved {len(attached)} attached dataset(s) from data_assets.json")
+    print(f"[selection] resolved {len(attached)} attached dataset(s) from data_assets.json")
     return attached, inputs
 
 
@@ -149,6 +131,7 @@ def load_and_prepare_trials(attached):
     )
     from analysis.sessions import load_processed_table
 
+    print("[load] loading and preparing trials…")
     # "sites" == trials (one row per site). The analysis doesn't need to know
     # whether the dataset lives on local disk or S3, signed or unsigned --
     # that's load_processed_table's job, not the analysis's.
@@ -421,6 +404,9 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
         "H_Other_NoRew",
     ]
     FEATURE_COLS = PLOT_COEFS
+    _glm_sessions = list(_rs["session_id"].unique())
+    _n_glm_sessions = len(_glm_sessions)
+    print(f"[history_glm] fitting per-session GLM for {_n_glm_sessions} sessions…")
     records = []
     for session_id, sdf in _rs.groupby("session_id"):
         if len(sdf) < 10 or sdf["choice"].nunique() < 2:
@@ -442,7 +428,7 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
                     )
                 )
         except Exception as e:
-            print(f"Session {session_id} failed: {e}")
+            print(f"[history_glm] session {session_id} failed: {e}")
     coefs = pd.DataFrame(records)
     SAME_COLOR = "#e07b39"
     OTHER_COLOR = "#4f8fc0"
@@ -997,6 +983,7 @@ def md_counterfactual(mo):
 
 @app.cell
 def counterfactual_matrix(np, pd, trials_all):
+    print("[counterfactual] computing counterfactual matrix…")
     # ── Counterfactual learning ────────────────────────────────────────────────
     #
     # Idea: after the *first* stop of a block the animal has one piece of evidence
@@ -1723,7 +1710,6 @@ def counterfactual_cohort_by_window(
 @app.cell
 def finalize(
     store,
-    progress,
     run_id,
     started_at,
     build_manifest,
@@ -1750,7 +1736,7 @@ def finalize(
         extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
     store.write_json("manifest.json", manifest)
-    progress.completed(stage="run")
+    print(f"[run] complete — run_id={run_id}")
     return (manifest,)
 
 

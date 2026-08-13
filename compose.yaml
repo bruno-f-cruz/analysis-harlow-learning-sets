@@ -27,8 +27,6 @@ services:
       - .:/workspace
       - /workspace/.venv
       - ./artifacts:/artifacts
-    ports:
-      - "8080:8080"
     environment:
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
