@@ -128,13 +128,28 @@ def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
     _dataset_location = _json.loads(
         (_Path(__file__).parent.parent / "data_assets.json").read_text()
     )["attached_datasets"][0]["location"]
-    store = S3Store.from_url(_dataset_location, region="us-west-2")
+    store = S3Store.from_url(_dataset_location, region="us-west-2", skip_signature=True)
 
     return artifact_store, figures_dir, run_id, started_at, store
 
 
 @app.cell
-def selection(Path, artifact_store, build_inputs_manifest, load_attached_datasets):
+def session_viewer(mo, store):
+    import io
+    import pandas as _pd
+    import obstore as _obs
+
+    _df = _pd.read_parquet(io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes())))
+    mo.ui.table(_df, pagination=True, page_size=20, selection=None)
+
+
+@app.cell
+def selection(
+    Path,
+    artifact_store,
+    build_inputs_manifest,
+    load_attached_datasets,
+):
     from analysis.logger import log as _log
 
     # data_assets.json points at the already-processed dataset (see
