@@ -12,7 +12,7 @@ def imports_marimo():
 
 
 @app.cell
-def figure_output(mo, figures_dir):
+def figure_output(figures_dir, mo):
     import itertools
     import re
 
@@ -72,31 +72,26 @@ def imports_provenance():
 
     return (
         artifact_store_for_uri,
-        generate_run_id,
+        build_inputs_manifest,
         build_manifest,
+        datetime,
+        generate_run_id,
         git_commit,
         git_is_dirty,
         host_info,
         load_attached_datasets,
-        build_inputs_manifest,
-        datetime,
-        timezone,
         os,
+        timezone,
     )
 
 
 @app.cell
-def run_setup(
-    generate_run_id,
-    artifact_store_for_uri,
-    os,
-    datetime,
-    timezone,
-):
+def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
     import logging
     import sys
     from pathlib import Path as _Path
     from analysis.logger import log as _log
+    from obstore.store import S3Store
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -108,37 +103,49 @@ def run_setup(
     # stack duplicate handlers.
     if not _log.handlers:
         _handler = logging.StreamHandler(sys.stdout)
-        _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        _handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        )
         _log.addHandler(_handler)
     _log.setLevel(logging.INFO)
 
     run_id = os.environ.get("RUN_ID") or generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
     artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
-    store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
+    artifact_store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
 
-    # figures_dir: where plt.show() saves PNGs in script mode.
-    # LocalArtifactStore exposes `.root`; fall back to ./scratch/figures for
-    # S3 backends (matplotlib can't write directly to S3).
-    _local_root = getattr(store, "root", None)
-    figures_dir = (_local_root / "figures") if _local_root is not None else _Path("./scratch/figures")
+    _local_root = getattr(artifact_store, "root", None)
+    figures_dir = (
+        (_local_root / "figures")
+        if _local_root is not None
+        else _Path("./scratch/figures")
+    )
 
     _log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
-    return run_id, started_at, store, figures_dir
+
+    import json as _json
+
+    _dataset_location = _json.loads(
+        (_Path(__file__).parent.parent / "data_assets.json").read_text()
+    )["attached_datasets"][0]["location"]
+    store = S3Store.from_url(_dataset_location, region="us-west-2")
+
+    return artifact_store, figures_dir, run_id, started_at, store
 
 
 @app.cell
-def selection(load_attached_datasets, build_inputs_manifest, store, Path):
+def selection(Path, artifact_store, build_inputs_manifest, load_attached_datasets):
     from analysis.logger import log as _log
+
     # data_assets.json points at the already-processed dataset (see
     # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
-    store.write_json("selection.json", {"attached_datasets": attached})
+    artifact_store.write_json("selection.json", {"attached_datasets": attached})
 
     inputs = build_inputs_manifest([entry["location"] for entry in attached])
-    store.write_json("inputs.json", inputs)
+    artifact_store.write_json("inputs.json", inputs)
     _log.info("resolved %d attached dataset(s) from data_assets.json", len(attached))
-    return attached, inputs
+    return (attached,)
 
 
 @app.cell
@@ -234,7 +241,7 @@ def load_and_prepare_trials(attached):
     # raw mount-prefix-derived `SUBJECT_IDS` from `sync_raw_data`, which predates
     # `trials` and can't see the override.
     SUBJECT_IDS_CORRECTED = sorted(trials["subject_id"].unique())
-    return np, pd, trials, trials_all, SUBJECT_IDS_CORRECTED
+    return SUBJECT_IDS_CORRECTED, np, pd, trials, trials_all
 
 
 @app.cell
@@ -1008,6 +1015,7 @@ def md_counterfactual(mo):
 @app.cell
 def counterfactual_matrix(np, pd, trials_all):
     from analysis.logger import log as _log
+
     _log.info("computing counterfactual matrix…")
     # ── Counterfactual learning ────────────────────────────────────────────────
     #
@@ -1576,7 +1584,12 @@ def counterfactual_heatmap_per_animal(
 
 @app.cell
 def counterfactual_trends_per_animal(
-    COUNTERFACTUAL_CELLS, a_lot_of_style, cf, counterfactual_session_trends, np, plt
+    COUNTERFACTUAL_CELLS,
+    a_lot_of_style,
+    cf,
+    counterfactual_session_trends,
+    np,
+    plt,
 ):
     from matplotlib.ticker import MaxNLocator
 
@@ -1632,7 +1645,10 @@ def counterfactual_trends_per_animal(
 
 @app.cell
 def counterfactual_cohort_by_session(
-    a_lot_of_style, cf, plot_counterfactual_cohort_average, plt
+    a_lot_of_style,
+    cf,
+    plot_counterfactual_cohort_average,
+    plt,
 ):
     # Average across mice at the same session number (each animal's own 0-based
     # session_index), so column k is "the cohort's k-th session". Each animal
@@ -1734,15 +1750,15 @@ def counterfactual_cohort_by_window(
 
 @app.cell
 def finalize(
-    store,
-    run_id,
-    started_at,
+    artifact_store,
     build_manifest,
+    datetime,
     git_commit,
     git_is_dirty,
     host_info,
     os,
-    datetime,
+    run_id,
+    started_at,
     timezone,
 ):
     manifest = build_manifest(
@@ -1761,9 +1777,10 @@ def finalize(
         extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
     from analysis.logger import log as _log
-    store.write_json("manifest.json", manifest)
+
+    artifact_store.write_json("manifest.json", manifest)
     _log.info("complete — run_id=%s", run_id)
-    return (manifest,)
+    return
 
 
 if __name__ == "__main__":

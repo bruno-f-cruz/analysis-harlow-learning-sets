@@ -87,8 +87,13 @@ def aws_sync(src: str, dst: str, *, no_sign_request: bool = False) -> None:
         credentials with access to the bucket are configured.
     """
     cmd = [
-        "aws", "s3", "sync", src, dst,
-        "--exclude", "Behavior-Videos/*",
+        "aws",
+        "s3",
+        "sync",
+        src,
+        dst,
+        "--exclude",
+        "Behavior-Videos/*",
         "--no-progress",
         "--only-show-errors",
     ]

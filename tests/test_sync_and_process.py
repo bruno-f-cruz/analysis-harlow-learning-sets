@@ -200,7 +200,9 @@ def test_skips_processing_when_already_built(manifest, stubs):
     assert stubs["aggregate"] == []
 
 
-def test_force_process_flag_rebuilds_even_if_already_built(manifest, stubs, monkeypatch):
+def test_force_process_flag_rebuilds_even_if_already_built(
+    manifest, stubs, monkeypatch
+):
     sync_and_process.PROCESSED_DIR.mkdir(parents=True)
     (sync_and_process.PROCESSED_DIR / "session.parquet").touch()
     monkeypatch.setattr(sys, "argv", ["sync_and_process.py", "--force-process"])

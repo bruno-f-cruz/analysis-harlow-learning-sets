@@ -24,6 +24,7 @@ dependencies = [
     "boto3>=1.35",
     "pyyaml>=6.0",
     "polars>=1.43.2",  # 1.43.1 is yanked upstream
+    "obstore>=0.11.0",
 ]
 
 [dependency-groups]
