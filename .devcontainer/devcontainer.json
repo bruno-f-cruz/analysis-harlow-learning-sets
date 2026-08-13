@@ -4,10 +4,9 @@
   "service": "dev",
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
-  "forwardPorts": [2718, 8080],
+  "forwardPorts": [2718],
   "portsAttributes": {
-    "2718": { "label": "marimo", "onAutoForward": "notify" },
-    "8080": { "label": "progress dashboard", "onAutoForward": "notify" }
+    "2718": { "label": "marimo", "onAutoForward": "notify" }
   },
   "customizations": {
     "vscode": {
