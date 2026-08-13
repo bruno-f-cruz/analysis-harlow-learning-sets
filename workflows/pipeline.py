@@ -1,10 +1,7 @@
-import logging
 import marimo
 
 __generated_with = "0.23.15"
 app = marimo.App(width="full")
-
-log = logging.getLogger("pipeline")
 
 
 @app.cell
@@ -98,7 +95,9 @@ def run_setup(
     datetime,
     timezone,
 ):
+    import logging
     import sys
+    from analysis.logger import log
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -124,6 +123,7 @@ def run_setup(
 
 @app.cell
 def selection(load_attached_datasets, build_inputs_manifest, store, Path):
+    from analysis.logger import log
     # data_assets.json points at the already-processed dataset (see
     # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
@@ -145,6 +145,7 @@ def load_and_prepare_trials(attached):
         report_subject_overrides,
         trim_sessions,
     )
+    from analysis.logger import log
     from analysis.sessions import load_processed_table
 
     log.info("loading and preparing trials…")
@@ -384,6 +385,7 @@ def choice_at_first_stops_across_sessions(
 
 @app.cell
 def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
+    from analysis.logger import log
     from sklearn.linear_model import LogisticRegression
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
@@ -999,6 +1001,7 @@ def md_counterfactual(mo):
 
 @app.cell
 def counterfactual_matrix(np, pd, trials_all):
+    from analysis.logger import log
     log.info("computing counterfactual matrix…")
     # ── Counterfactual learning ────────────────────────────────────────────────
     #
@@ -1751,6 +1754,7 @@ def finalize(
         # collision. Pull out only the non-reserved field(s).
         extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
+    from analysis.logger import log
     store.write_json("manifest.json", manifest)
     log.info("complete — run_id=%s", run_id)
     return (manifest,)
