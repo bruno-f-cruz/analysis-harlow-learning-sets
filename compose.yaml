@@ -8,7 +8,6 @@ services:
       - ./artifacts:/artifacts
     ports:
       - "2718:2718"
-      - "8080:8080"
     working_dir: /workspace
     environment:
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
@@ -21,16 +20,17 @@ services:
     stdin_open: true
     tty: true
 
-  analysis:
+  prod:
     build:
       context: .
     volumes:
       - .:/workspace
       - /workspace/.venv
       - ./artifacts:/artifacts
+    ports:
+      - "8080:8080"
     environment:
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
     working_dir: /workspace
-    command: ["uv", "run", "python", "workflows/pipeline.py"]
-    profiles: ["run"]
+    command: ["bash", "scripts/start_prod.sh"]
