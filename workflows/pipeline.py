@@ -1,7 +1,10 @@
+import logging
 import marimo
 
 __generated_with = "0.23.15"
 app = marimo.App(width="full")
+
+log = logging.getLogger("pipeline")
 
 
 @app.cell
@@ -95,14 +98,27 @@ def run_setup(
     datetime,
     timezone,
 ):
+    import sys
+
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
     # rejects a `setup` cell that (like this one) depends on other cells.
+
+    # Route pipeline logs to stdout so they appear in marimo's cell-output area
+    # (which only captures stdout) and are picked up by the `tee` in
+    # scripts/start_prod.sh.  Idempotent: re-running this cell in dev won't
+    # stack duplicate handlers.
+    if not log.handlers:
+        _handler = logging.StreamHandler(sys.stdout)
+        _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        log.addHandler(_handler)
+    log.setLevel(logging.INFO)
+
     run_id = os.environ.get("RUN_ID") or generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
     artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
     store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
-    print(f"[run] run_id={run_id}  artifacts → {artifact_uri}/runs/{run_id}")
+    log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
     return run_id, started_at, store
 
 
@@ -115,7 +131,7 @@ def selection(load_attached_datasets, build_inputs_manifest, store, Path):
 
     inputs = build_inputs_manifest([entry["location"] for entry in attached])
     store.write_json("inputs.json", inputs)
-    print(f"[selection] resolved {len(attached)} attached dataset(s) from data_assets.json")
+    log.info("resolved %d attached dataset(s) from data_assets.json", len(attached))
     return attached, inputs
 
 
@@ -131,7 +147,7 @@ def load_and_prepare_trials(attached):
     )
     from analysis.sessions import load_processed_table
 
-    print("[load] loading and preparing trials…")
+    log.info("loading and preparing trials…")
     # "sites" == trials (one row per site). The analysis doesn't need to know
     # whether the dataset lives on local disk or S3, signed or unsigned --
     # that's load_processed_table's job, not the analysis's.
@@ -406,7 +422,7 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
     FEATURE_COLS = PLOT_COEFS
     _glm_sessions = list(_rs["session_id"].unique())
     _n_glm_sessions = len(_glm_sessions)
-    print(f"[history_glm] fitting per-session GLM for {_n_glm_sessions} sessions…")
+    log.info("fitting per-session GLM for %d sessions…", _n_glm_sessions)
     records = []
     for session_id, sdf in _rs.groupby("session_id"):
         if len(sdf) < 10 or sdf["choice"].nunique() < 2:
@@ -428,7 +444,7 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
                     )
                 )
         except Exception as e:
-            print(f"[history_glm] session {session_id} failed: {e}")
+            log.warning("session %s failed: %s", session_id, e)
     coefs = pd.DataFrame(records)
     SAME_COLOR = "#e07b39"
     OTHER_COLOR = "#4f8fc0"
@@ -983,7 +999,7 @@ def md_counterfactual(mo):
 
 @app.cell
 def counterfactual_matrix(np, pd, trials_all):
-    print("[counterfactual] computing counterfactual matrix…")
+    log.info("computing counterfactual matrix…")
     # ── Counterfactual learning ────────────────────────────────────────────────
     #
     # Idea: after the *first* stop of a block the animal has one piece of evidence
@@ -1736,7 +1752,7 @@ def finalize(
         extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
     store.write_json("manifest.json", manifest)
-    print(f"[run] complete — run_id={run_id}")
+    log.info("complete — run_id=%s", run_id)
     return (manifest,)
 
 
