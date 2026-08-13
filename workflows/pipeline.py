@@ -97,7 +97,7 @@ def run_setup(
 ):
     import logging
     import sys
-    from analysis.logger import log
+    from analysis.logger import log as _log
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -107,23 +107,23 @@ def run_setup(
     # (which only captures stdout) and are picked up by the `tee` in
     # scripts/start_prod.sh.  Idempotent: re-running this cell in dev won't
     # stack duplicate handlers.
-    if not log.handlers:
+    if not _log.handlers:
         _handler = logging.StreamHandler(sys.stdout)
         _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-        log.addHandler(_handler)
-    log.setLevel(logging.INFO)
+        _log.addHandler(_handler)
+    _log.setLevel(logging.INFO)
 
     run_id = os.environ.get("RUN_ID") or generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
     artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
     store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
-    log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
+    _log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
     return run_id, started_at, store
 
 
 @app.cell
 def selection(load_attached_datasets, build_inputs_manifest, store, Path):
-    from analysis.logger import log
+    from analysis.logger import log as _log
     # data_assets.json points at the already-processed dataset (see
     # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
     attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
@@ -131,7 +131,7 @@ def selection(load_attached_datasets, build_inputs_manifest, store, Path):
 
     inputs = build_inputs_manifest([entry["location"] for entry in attached])
     store.write_json("inputs.json", inputs)
-    log.info("resolved %d attached dataset(s) from data_assets.json", len(attached))
+    _log.info("resolved %d attached dataset(s) from data_assets.json", len(attached))
     return attached, inputs
 
 
@@ -145,10 +145,10 @@ def load_and_prepare_trials(attached):
         report_subject_overrides,
         trim_sessions,
     )
-    from analysis.logger import log
+    from analysis.logger import log as _log
     from analysis.sessions import load_processed_table
 
-    log.info("loading and preparing trials…")
+    _log.info("loading and preparing trials…")
     # "sites" == trials (one row per site). The analysis doesn't need to know
     # whether the dataset lives on local disk or S3, signed or unsigned --
     # that's load_processed_table's job, not the analysis's.
@@ -385,7 +385,7 @@ def choice_at_first_stops_across_sessions(
 
 @app.cell
 def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
-    from analysis.logger import log
+    from analysis.logger import log as _log
     from sklearn.linear_model import LogisticRegression
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
@@ -424,7 +424,7 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
     FEATURE_COLS = PLOT_COEFS
     _glm_sessions = list(_rs["session_id"].unique())
     _n_glm_sessions = len(_glm_sessions)
-    log.info("fitting per-session GLM for %d sessions…", _n_glm_sessions)
+    _log.info("fitting per-session GLM for %d sessions…", _n_glm_sessions)
     records = []
     for session_id, sdf in _rs.groupby("session_id"):
         if len(sdf) < 10 or sdf["choice"].nunique() < 2:
@@ -446,7 +446,7 @@ def history_glm_per_session(a_lot_of_style, np, pd, plt, trials):
                     )
                 )
         except Exception as e:
-            log.warning("session %s failed: %s", session_id, e)
+            _log.warning("session %s failed: %s", session_id, e)
     coefs = pd.DataFrame(records)
     SAME_COLOR = "#e07b39"
     OTHER_COLOR = "#4f8fc0"
@@ -1001,8 +1001,8 @@ def md_counterfactual(mo):
 
 @app.cell
 def counterfactual_matrix(np, pd, trials_all):
-    from analysis.logger import log
-    log.info("computing counterfactual matrix…")
+    from analysis.logger import log as _log
+    _log.info("computing counterfactual matrix…")
     # ── Counterfactual learning ────────────────────────────────────────────────
     #
     # Idea: after the *first* stop of a block the animal has one piece of evidence
@@ -1754,9 +1754,9 @@ def finalize(
         # collision. Pull out only the non-reserved field(s).
         extra={"git_dirty": git_is_dirty(), "hostname": host_info()["hostname"]},
     )
-    from analysis.logger import log
+    from analysis.logger import log as _log
     store.write_json("manifest.json", manifest)
-    log.info("complete — run_id=%s", run_id)
+    _log.info("complete — run_id=%s", run_id)
     return (manifest,)
 
 
