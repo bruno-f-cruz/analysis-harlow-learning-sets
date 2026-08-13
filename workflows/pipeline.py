@@ -12,14 +12,12 @@ def imports_marimo():
 
 
 @app.cell
-def figure_output(mo):
+def figure_output(mo, figures_dir):
     import itertools
     import re
-    from pathlib import Path as _Path
 
     from matplotlib import pyplot as plt
 
-    SCRATCH_DIR = _Path("./scratch")
     IS_SCRIPT = mo.app_meta().mode == "script"
 
     def _figure_slug(fig, fallback):
@@ -34,11 +32,11 @@ def figure_output(mo):
     _fig_counter = itertools.count()
 
     def _save_open_figures(*args, **kwargs):
-        SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+        figures_dir.mkdir(parents=True, exist_ok=True)
         for _num in plt.get_fignums():
             _figure = plt.figure(_num)
             _path = (
-                SCRATCH_DIR
+                figures_dir
                 / f"{next(_fig_counter):03d}-{_figure_slug(_figure, f'figure{_num}')}.png"
             )
             _figure.savefig(_path, dpi=150, bbox_inches="tight")
@@ -97,6 +95,7 @@ def run_setup(
 ):
     import logging
     import sys
+    from pathlib import Path as _Path
     from analysis.logger import log as _log
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
@@ -117,8 +116,15 @@ def run_setup(
     started_at = datetime.now(timezone.utc).isoformat()
     artifact_uri = os.environ.get("ARTIFACT_URI", "./artifacts")
     store = artifact_store_for_uri(f"{artifact_uri}/runs/{run_id}")
+
+    # figures_dir: where plt.show() saves PNGs in script mode.
+    # LocalArtifactStore exposes `.root`; fall back to ./scratch/figures for
+    # S3 backends (matplotlib can't write directly to S3).
+    _local_root = getattr(store, "root", None)
+    figures_dir = (_local_root / "figures") if _local_root is not None else _Path("./scratch/figures")
+
     _log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
-    return run_id, started_at, store
+    return run_id, started_at, store, figures_dir
 
 
 @app.cell
