@@ -60,7 +60,7 @@ data = [
 
 [[package]]
 name = "aind-behavior-vr-foraging-packaging"
-version = "0.0.11"
+version = "0.0.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
@@ -74,9 +74,9 @@ dependencies = [
     { name = "pynwb" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b9/c9/a18844fd802f71f4603555c46f7a945ace18effc1c98ab7fcf513bdca735/aind_behavior_vr_foraging_packaging-0.0.11.tar.gz", hash = "sha256:ec8e848979450fe14c77f362bf130d62325a151f59fc0144ff3fcd79fba84f46", size = 299836, upload-time = "2026-08-13T00:15:20.642Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/02/14c093bbf849a792cffad444cb89f248c19caa990e9ad0e5b80fb97b77e6/aind_behavior_vr_foraging_packaging-0.0.13.tar.gz", hash = "sha256:46370e968b53f48a30418dea17193f2f74fc7f19d06db58aca5e5f898f683ad3", size = 301779, upload-time = "2026-08-17T18:09:38.886Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/30/112e87bf7ef901dbfb35bbfd36660758a42061b1afa8f099721928a53a45/aind_behavior_vr_foraging_packaging-0.0.11-py3-none-any.whl", hash = "sha256:35ba8fe3731d90ef3425ccead60d23262ad64753d352c3b805abacecdb029e3a", size = 48669, upload-time = "2026-08-13T00:15:19.377Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/7a/7b7b1cd58c33fe2daa93fd769e799b48de5260f102e0dd1825bdaf29782b/aind_behavior_vr_foraging_packaging-0.0.13-py3-none-any.whl", hash = "sha256:f84ba69b9acc5c4fd36c9bb6ae86a1e7db53a45a49732b9fac4eb927de09f4a6", size = 53172, upload-time = "2026-08-17T18:09:37.756Z" },
 ]
 
 [[package]]
@@ -148,7 +148,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aind-behavior-vr-foraging", extras = ["data"], specifier = ">=1.1" },
-    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.11" },
+    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.13" },
     { name = "aind-data-access-api", specifier = ">=1.9.2" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "duckdb", specifier = ">=1.5.5" },
@@ -2089,7 +2089,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [

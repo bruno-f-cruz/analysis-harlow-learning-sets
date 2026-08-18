@@ -139,7 +139,9 @@ def session_viewer(mo, store):
     import pandas as _pd
     import obstore as _obs
 
-    _df = _pd.read_parquet(io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes())))
+    _df = _pd.read_parquet(
+        io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes()))
+    )
     mo.ui.table(_df, pagination=True, page_size=20, selection=None)
 
 

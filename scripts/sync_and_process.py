@@ -31,9 +31,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from aind_behavior_vr_foraging_packaging.export_pipeline import (
-    AggregationRule,
-    Aggregator,
+from aind_behavior_vr_foraging_packaging.pipeline import (
     aggregate,
     process_sessions,
 )
@@ -159,12 +157,6 @@ def main() -> None:
         aggregate(
             PROCESSED_DIR / "sessions",
             PROCESSED_DIR,
-            Aggregator(
-                rules=[
-                    AggregationRule("sites", cleanup=False),
-                    AggregationRule("session", cleanup=False),
-                ]
-            ),
         )
 
     if args.upload:
