@@ -10,9 +10,11 @@
 2. Run every processor except ``sniffing`` on each session
    (``aind_behavior_vr_foraging_packaging.export_pipeline.process_sessions``),
    then aggregate ``sites``/``session`` into flat, all-sessions Parquet files
-   at ``data/processed/`` (``export_pipeline.aggregate``). Skipped entirely
-   when ``data/processed/session.parquet`` already exists -- pass
-   ``--force-process`` to rebuild anyway.
+   at ``data/processed/`` (``export_pipeline.aggregate``). Only sessions
+   without a ``data/processed/sessions/{session_id}/`` directory are
+   processed, then everything is re-aggregated; the whole step is skipped
+   only when the export already covers every raw session. Pass
+   ``--force-process`` to reprocess all of them anyway.
 3. With ``--upload``, sync ``data/processed/`` to the scratch bucket
    ``data_assets.json`` points at.
 
@@ -49,6 +51,8 @@ SCRATCH_PREFIX = "vr-foraging/harlow-experiments/harlow-experiment"
 
 #: This analysis doesn't use sniffing.
 EXCLUDE_PROCESSORS = ["sniffing"]
+
+logger = logging.getLogger(__name__)
 
 
 def check_aws_cli_exists() -> None:
@@ -98,7 +102,7 @@ def aws_sync(src: str, dst: str, *, no_sign_request: bool = False) -> None:
     if no_sign_request:
         cmd.append("--no-sign-request")
 
-    logging.info("  $ %s", " ".join(cmd))
+    logger.info("  $ %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
 
@@ -118,10 +122,12 @@ def main() -> None:
     parser.add_argument(
         "--force-process",
         action="store_true",
-        help="Rebuild data/processed/ even if it already exists (by default, an "
-        "existing data/processed/session.parquet means processing is skipped).",
+        help="Reprocess every raw session (by default, only sessions missing "
+        "from data/processed/sessions/ are processed).",
     )
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     check_aws_cli_exists()  # once per run, not once per session -- ~0.9s per subprocess spawn
 
@@ -138,14 +144,37 @@ def main() -> None:
             continue
         aws_sync(entry["location"], str(dest), no_sign_request=True)
 
-    if (PROCESSED_DIR / "session.parquet").exists() and not args.force_process:
-        logging.info(
-            "%s already exists -- skipping process_sessions/aggregate "
-            "(pass --force-process to rebuild).",
+    all_sessions = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
+    sessions_dir = PROCESSED_DIR / "sessions"
+    already_processed = (
+        {p.name for p in sessions_dir.iterdir() if p.is_dir()}
+        if sessions_dir.exists()
+        else set()
+    )
+    pending = [p for p in all_sessions if p.name not in already_processed]
+
+    # An existing session.parquet is not on its own proof the export is current:
+    # a later sync can add raw sessions that predate it. Only a processed
+    # directory covering every raw session earns the skip.
+    if (
+        (PROCESSED_DIR / "session.parquet").exists()
+        and not pending
+        and not args.force_process
+    ):
+        logger.info(
+            "%s already covers all %d raw sessions -- skipping "
+            "process_sessions/aggregate (pass --force-process to rebuild).",
             PROCESSED_DIR / "session.parquet",
+            len(all_sessions),
         )
     else:
-        to_process = sorted(p for p in RAW_DIR.iterdir() if p.is_dir())
+        to_process = all_sessions if args.force_process else pending
+        logger.info(
+            "Processing %d of %d raw session(s) (%d already processed).",
+            len(to_process),
+            len(all_sessions),
+            len(already_processed),
+        )
         process_sessions(
             to_process,
             PROCESSED_DIR,
@@ -154,8 +183,12 @@ def main() -> None:
             clean=False,
             max_workers=4,
         )
+        # Always re-aggregate over the full sessions/ tree, including sessions
+        # processed by earlier runs -- otherwise the flat parquets would only
+        # describe this run's increment.
+        logger.info("Aggregating %s -> %s", sessions_dir, PROCESSED_DIR)
         aggregate(
-            PROCESSED_DIR / "sessions",
+            sessions_dir,
             PROCESSED_DIR,
         )
 
