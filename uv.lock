@@ -60,9 +60,10 @@ data = [
 
 [[package]]
 name = "aind-behavior-vr-foraging-packaging"
-version = "0.0.13"
+version = "0.0.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "aind-behavior-curriculum" },
     { name = "aind-behavior-vr-foraging", extra = ["data"] },
     { name = "aind-nwb-utils" },
     { name = "hdmf-zarr" },
@@ -74,9 +75,9 @@ dependencies = [
     { name = "pynwb" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/02/14c093bbf849a792cffad444cb89f248c19caa990e9ad0e5b80fb97b77e6/aind_behavior_vr_foraging_packaging-0.0.13.tar.gz", hash = "sha256:46370e968b53f48a30418dea17193f2f74fc7f19d06db58aca5e5f898f683ad3", size = 301779, upload-time = "2026-08-17T18:09:38.886Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/9f/a402a40293f8c141bce46f809780a34882704da1ec4b19c133626139589c/aind_behavior_vr_foraging_packaging-0.0.16.tar.gz", hash = "sha256:14b28374beb28d357c23f19df4a1443e449fb6931c262df5d3bc41d14650a338", size = 313174, upload-time = "2026-09-01T19:48:13.852Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/7a/7b7b1cd58c33fe2daa93fd769e799b48de5260f102e0dd1825bdaf29782b/aind_behavior_vr_foraging_packaging-0.0.13-py3-none-any.whl", hash = "sha256:f84ba69b9acc5c4fd36c9bb6ae86a1e7db53a45a49732b9fac4eb927de09f4a6", size = 53172, upload-time = "2026-08-17T18:09:37.756Z" },
+    { url = "https://files.pythonhosted.org/packages/36/42/8c558dcb3e53127ea299572475492bcaf0e7bad39093f9a6c74755bdcb5d/aind_behavior_vr_foraging_packaging-0.0.16-py3-none-any.whl", hash = "sha256:cbcbfd12c366296665db61646166d93bc934f7b51800e9cbb82a98ac489eff7e", size = 56126, upload-time = "2026-09-01T19:48:12.545Z" },
 ]
 
 [[package]]
@@ -148,7 +149,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aind-behavior-vr-foraging", extras = ["data"], specifier = ">=1.1" },
-    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.13" },
+    { name = "aind-behavior-vr-foraging-packaging", specifier = ">=0.0.16" },
     { name = "aind-data-access-api", specifier = ">=1.9.2" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "duckdb", specifier = ">=1.5.5" },
