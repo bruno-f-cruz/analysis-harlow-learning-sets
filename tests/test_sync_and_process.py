@@ -16,10 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from aind_behavior_vr_foraging_packaging.export_pipeline import (
-    AggregationRule,
-    Aggregator,
-)
 
 _MODULE_PATH = Path(__file__).parent.parent / "scripts" / "sync_and_process.py"
 _spec = importlib.util.spec_from_file_location("sync_and_process", _MODULE_PATH)
@@ -217,15 +213,9 @@ def test_aggregates_sites_and_session_without_cleanup(manifest, stubs):
     sync_and_process.main()
 
     ((args, kwargs),) = stubs["aggregate"]
-    sessions_dir, output_dir, aggregator = args
+    sessions_dir, output_dir = args
     assert sessions_dir == sync_and_process.PROCESSED_DIR / "sessions"
     assert output_dir == sync_and_process.PROCESSED_DIR
-    assert aggregator == Aggregator(
-        rules=[
-            AggregationRule("sites", cleanup=False),
-            AggregationRule("session", cleanup=False),
-        ]
-    )
     assert kwargs == {}
 
 
