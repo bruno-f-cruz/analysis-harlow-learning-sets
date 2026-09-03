@@ -28,7 +28,9 @@ def load_data(Path):
     df = load_processed_table(location, "session")
     trials = load_processed_table(location, "sites")
     _trials, trials_all = prepare_trials(trials, df)
-    print(f"Loaded {trials_all['session_id'].nunique()} sessions, {len(trials_all):,} trials")
+    print(
+        f"Loaded {trials_all['session_id'].nunique()} sessions, {len(trials_all):,} trials"
+    )
     return df, trials_all
 
 
@@ -49,7 +51,9 @@ def curriculum_stage_selection(df, mo, trials_all):
         df["curriculum_stage_name"].isin(ABREVERSAL_STAGES), "session_id"
     ]
     trials_all_full = trials_all[trials_all["session_id"].isin(_full_sessions)]
-    trials_all_abreversal = trials_all[trials_all["session_id"].isin(_abreversal_sessions)]
+    trials_all_abreversal = trials_all[
+        trials_all["session_id"].isin(_abreversal_sessions)
+    ]
 
     # Defaults to `--dataset` on the command line (e.g. `python
     # workflows/within_session_performance.py --dataset ABReversal`); in the
@@ -58,7 +62,9 @@ def curriculum_stage_selection(df, mo, trials_all):
     _DATASET_OPTIONS = ["Full", "ABReversal"]
     _cli_dataset = mo.cli_args().get("dataset", "Full")
     if _cli_dataset not in _DATASET_OPTIONS:
-        raise ValueError(f"--dataset must be one of {_DATASET_OPTIONS}, got {_cli_dataset!r}")
+        raise ValueError(
+            f"--dataset must be one of {_DATASET_OPTIONS}, got {_cli_dataset!r}"
+        )
 
     dataset_toggle = mo.ui.radio(
         options=_DATASET_OPTIONS, value=_cli_dataset, label="Curriculum stage dataset"

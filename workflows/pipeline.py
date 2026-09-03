@@ -138,10 +138,14 @@ def session_viewer(mo, store):
     import pandas as _pd
     import obstore as _obs
 
-    df = _pd.read_parquet(
-        io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes()))
+    df = _pd.read_parquet(io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes())))
+    mo.ui.table(
+        df,
+        pagination=True,
+        page_size=20,
+        selection=None,
+        hidden_columns=["rig", "task_logic", "session", "trainer_state"],
     )
-    mo.ui.table(df, pagination=True, page_size=20, selection=None, hidden_columns=["rig", "task_logic", "session", "trainer_state"])
     return (df,)
 
 
@@ -228,7 +232,9 @@ def curriculum_stage_datasets(df, mo, trials, trials_all):
     _DATASET_OPTIONS = ["Full", "ABReversal"]
     _cli_dataset = mo.cli_args().get("dataset", "Full")
     if _cli_dataset not in _DATASET_OPTIONS:
-        raise ValueError(f"--dataset must be one of {_DATASET_OPTIONS}, got {_cli_dataset!r}")
+        raise ValueError(
+            f"--dataset must be one of {_DATASET_OPTIONS}, got {_cli_dataset!r}"
+        )
 
     dataset_toggle = mo.ui.radio(
         options=_DATASET_OPTIONS,
@@ -350,6 +356,17 @@ def choice_by_first_stop_overlay(a_lot_of_style, plt, trials_selected):
 
 
 @app.cell
+def naive_p_stop_first_last(a_lot_of_style, plt, trials_selected):
+    from analysis.plotting import plot_naive_p_stop_first_last
+
+    with a_lot_of_style():
+        plot_naive_p_stop_first_last(trials_selected, n_blocks=200)
+
+    plt.show()
+    return
+
+
+@app.cell
 def choice_at_first_stops_across_sessions(
     SUBJECT_IDS_SELECTED,
     a_lot_of_style,
@@ -359,7 +376,8 @@ def choice_at_first_stops_across_sessions(
 ):
     # P(choice) at the very first trial of every block, averaged within session, plotted across sessions
     _rs = trials_selected[
-        (trials_selected["site_label"] == "RewardSite") & trials_selected["block"].notna()
+        (trials_selected["site_label"] == "RewardSite")
+        & trials_selected["block"].notna()
     ].copy()
     _rs = _rs.sort_values(["session_id", "block", "start_time"])
     _rs["_block_pos"] = _rs.groupby(["session_id", "block"]).cumcount()
@@ -525,7 +543,10 @@ def md_counterfactual(mo):
 
 @app.cell
 def counterfactual_matrix(trials_all_selected):
-    from analysis.counterfactual import counterfactual_block_table, counterfactual_session_matrix
+    from analysis.counterfactual import (
+        counterfactual_block_table,
+        counterfactual_session_matrix,
+    )
     from analysis.logger import log as _log
 
     _log.info("computing counterfactual matrix…")
@@ -588,7 +609,9 @@ def counterfactual_cohort_by_window(
             title=f"Counterfactual learning, averaged across mice at the same {window_blocks.value}-block window\n(faint = individual animals; bold line + shaded band = cohort mean & 95% CI; truncated once fewer than 4 animals remain)",
         )
     plt.show()
-    cf_cohort_window = counterfactual_cohort_average(cf_window, value="p_leave", min_animals=4)
+    cf_cohort_window = counterfactual_cohort_average(
+        cf_window, value="p_leave", min_animals=4
+    )
     _have = cf_window.groupby("session_index")["subject_id"].nunique()
     _contributing = (
         cf_cohort_window.groupby("session_index")["n_animals"]
@@ -623,8 +646,12 @@ def counterfactual_cohort_by_window_with_chance(
     window_blocks,
 ):
     from analysis.counterfactual import first_site_chance_by_window
-    from analysis.counterfactual import plot_counterfactual_cohort_average as _plot_cf_cohort_heatmap
-    from analysis.counterfactual import plot_counterfactual_cohort_by_condition as _plot_cf_cohort
+    from analysis.counterfactual import (
+        plot_counterfactual_cohort_average as _plot_cf_cohort_heatmap,
+    )
+    from analysis.counterfactual import (
+        plot_counterfactual_cohort_by_condition as _plot_cf_cohort,
+    )
     from analysis.plotting import bootstrap_group_stats
 
     _MIN_ANIMALS = 4  # match the main cohort plot's cutoff for a like-for-like x-range
@@ -660,12 +687,22 @@ def counterfactual_cohort_by_window_with_chance(
             title=f"Counterfactual learning, averaged across mice at the same {window_blocks.value}-block window\n(error bars = bootstrapped 95% CI across animals; dotted = chance level)",
         )
         _ax_ln.plot(
-            _chance_x, _chance_mean, color="black", ls=":", lw=1.6, zorder=5,
+            _chance_x,
+            _chance_mean,
+            color="black",
+            ls=":",
+            lw=1.6,
+            zorder=5,
             label="Chance (1 − P(stop) @ first site of block)",
         )
         _ax_ln.fill_between(
-            _chance_x, _chance_ci_lo, _chance_ci_hi,
-            color="black", alpha=0.12, linewidth=0, zorder=4,
+            _chance_x,
+            _chance_ci_lo,
+            _chance_ci_hi,
+            color="black",
+            alpha=0.12,
+            linewidth=0,
+            zorder=4,
         )
         _ax_ln.legend(frameon=False, fontsize=7, loc="best")
     plt.show()
@@ -680,12 +717,22 @@ def counterfactual_cohort_by_window_with_chance(
         )
         for _ax in _axes:
             _ax.plot(
-                _chance_x, _chance_mean, color="black", ls=":", lw=1.6, zorder=5,
+                _chance_x,
+                _chance_mean,
+                color="black",
+                ls=":",
+                lw=1.6,
+                zorder=5,
                 label="Chance (1 − P(stop) @ first site of block)",
             )
             _ax.fill_between(
-                _chance_x, _chance_ci_lo, _chance_ci_hi,
-                color="black", alpha=0.12, linewidth=0, zorder=4,
+                _chance_x,
+                _chance_ci_lo,
+                _chance_ci_hi,
+                color="black",
+                alpha=0.12,
+                linewidth=0,
+                zorder=4,
             )
         _axes[-1].legend(frameon=False, fontsize=7, loc="best")
     plt.show()
@@ -700,8 +747,12 @@ def counterfactual_cohort_by_window_excl_864845(
     skip_blocks,
     window_blocks,
 ):
-    from analysis.counterfactual import plot_counterfactual_cohort_average as _plot_cf_cohort_heatmap
-    from analysis.counterfactual import plot_counterfactual_cohort_by_condition as _plot_cf_cohort
+    from analysis.counterfactual import (
+        plot_counterfactual_cohort_average as _plot_cf_cohort_heatmap,
+    )
+    from analysis.counterfactual import (
+        plot_counterfactual_cohort_by_condition as _plot_cf_cohort,
+    )
 
     # Same cohort average as above, but with subject 864845 dropped -- the
     # noisiest of the five (see history_glm_reward_cells_by_window) and part

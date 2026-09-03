@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from analysis.features import appearance_table, label_first_stop
+from analysis.features import appearance_table, blocks_first_last_tags, label_first_stop
 
 #: Shared 2x2 condition palette (dark red, orange, dark blue, light blue/cyan)
 #: -- reused verbatim by every plot that splits on two reward-related
@@ -44,7 +44,9 @@ def bootstrap_mean_ci(values, rng, min_n=2, n_boot=2000):
     return values.mean(), lo, hi
 
 
-def bootstrap_group_stats(values: pd.Series, keys, rng, min_n=2, n_boot=2000) -> pd.DataFrame:
+def bootstrap_group_stats(
+    values: pd.Series, keys, rng, min_n=2, n_boot=2000
+) -> pd.DataFrame:
     """Bootstrapped 95% CI of ``values`` grouped by ``keys`` (a column/Series,
     or a list of them for a multi-key grouping).
 
@@ -56,7 +58,11 @@ def bootstrap_group_stats(values: pd.Series, keys, rng, min_n=2, n_boot=2000) ->
     index, rows = [], []
     for key, grp in values.groupby(keys):
         index.append(key)
-        rows.append(bootstrap_mean_ci(grp.to_numpy(dtype=float), rng, min_n=min_n, n_boot=n_boot))
+        rows.append(
+            bootstrap_mean_ci(
+                grp.to_numpy(dtype=float), rng, min_n=min_n, n_boot=n_boot
+            )
+        )
 
     if isinstance(keys, (list, tuple)):
         names = [k.name if isinstance(k, pd.Series) else k for k in keys]
@@ -460,7 +466,9 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
                     grp = rs[rs["is_rewarded_odor"] == is_rewarded]
                     if grp.empty:
                         continue
-                    stats = bootstrap_group_stats(grp["has_choice"], grp["appearance"], rng)
+                    stats = bootstrap_group_stats(
+                        grp["has_choice"], grp["appearance"], rng
+                    )
                     ax.errorbar(
                         stats.index,
                         stats["mean"],
@@ -484,3 +492,55 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
             figures[(subject, condition)] = fig
 
     return figures
+
+
+def plot_naive_p_stop_first_last(trials: pd.DataFrame, n_blocks: int = 200):
+    """:func:`plot_choice_by_block_position`'s curve -- P(has_choice) against
+    within-block appearance, split by odor reward status -- but averaged
+    across animals (each animal contributes its own per-appearance mean, and
+    the cohort mean +/- bootstrapped 95% CI across animals is drawn), and
+    with one subplot for each animal's first vs last ``n_blocks`` blocks
+    (see :func:`analysis.features.blocks_first_last_tags`) instead of per
+    session.
+    """
+    tagged = appearance_table(blocks_first_last_tags(trials, n_blocks=n_blocks))
+    per_animal = (
+        tagged.groupby(["block_range", "is_rewarded_odor", "appearance", "subject_id"])[
+            "has_choice"
+        ]
+        .mean()
+        .reset_index()
+    )
+
+    rng = np.random.default_rng(0)
+    colors = {True: "tab:orange", False: "tab:blue"}
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharey=True)
+    for ax, block_range in zip(axes, ["first", "last"]):
+        sub = per_animal[per_animal["block_range"] == block_range]
+        for is_rewarded, grp in sub.groupby("is_rewarded_odor"):
+            stats = bootstrap_group_stats(grp["has_choice"], grp["appearance"], rng)
+            label = "Rewarded odor" if is_rewarded else "Non-rewarded odor"
+            ax.errorbar(
+                stats.index,
+                stats["mean"],
+                yerr=ci_errorbar(stats),
+                marker="o",
+                capsize=3,
+                label=label,
+                color=colors[bool(is_rewarded)],
+            )
+        ax.set_xlabel("Appearance within block")
+        ax.set_xticks(range(5))
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"{block_range.capitalize()} {n_blocks} blocks")
+
+    axes[0].set_ylabel("P(has_choice)")
+    axes[0].legend()
+    fig.suptitle(
+        f"P(has_choice) by odor reward status, averaged across animals\n"
+        f"(first vs last {n_blocks} blocks, pooled chronologically across sessions; "
+        "error bars = bootstrapped 95% CI across animals)"
+    )
+    fig.tight_layout()
+    return fig

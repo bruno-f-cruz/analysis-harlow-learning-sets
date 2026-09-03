@@ -74,9 +74,9 @@ def plot_bias_by_odor_identity(pairs_df: pd.DataFrame):
     for subject in subjects:
         sub = pairs_df[pairs_df["subject_id"] == subject]
         for xi, (prev_rew, curr_rew, _label, _color) in enumerate(CONDITIONS):
-            grp = sub[(sub["prev_rewarded"] == prev_rew) & (sub["curr_rewarded"] == curr_rew)][
-                "p_stop_curr"
-            ]
+            grp = sub[
+                (sub["prev_rewarded"] == prev_rew) & (sub["curr_rewarded"] == curr_rew)
+            ]["p_stop_curr"]
             n = len(grp)
             mean, ci_lo, ci_hi = bootstrap_mean_ci(grp.to_numpy(dtype=float), rng)
             if np.isnan(mean):
@@ -88,7 +88,9 @@ def plot_bias_by_odor_identity(pairs_df: pd.DataFrame):
     pad = 0.08 * (y_hi - y_lo)
     y_top, y_bot = y_hi + pad, y_lo - pad
 
-    fig, axes = plt.subplots(1, len(subjects), figsize=(5 * len(subjects), 5), sharey=True, squeeze=False)
+    fig, axes = plt.subplots(
+        1, len(subjects), figsize=(5 * len(subjects), 5), sharey=True, squeeze=False
+    )
     fig.suptitle(
         "P(stop) at next odor encounter — 4 conditions\n(prev block rewarded / not) x (curr block rewarded / not)",
         fontsize=10,
@@ -104,8 +106,12 @@ def plot_bias_by_odor_identity(pairs_df: pd.DataFrame):
             m, ci_lo, ci_hi, n, label_y = stats
             yerr = [[max(m - ci_lo, 0)], [max(ci_hi - m, 0)]]
             ax.bar(xi, m, color=color, alpha=0.85, width=0.65, zorder=2)
-            ax.errorbar(xi, m, yerr=yerr, fmt="none", color="black", capsize=5, lw=1.5, zorder=3)
-            ax.text(xi, label_y, f"n={n}", ha="center", va="bottom", fontsize=7, zorder=4)
+            ax.errorbar(
+                xi, m, yerr=yerr, fmt="none", color="black", capsize=5, lw=1.5, zorder=3
+            )
+            ax.text(
+                xi, label_y, f"n={n}", ha="center", va="bottom", fontsize=7, zorder=4
+            )
         ax.axvline(1.5, color="black", lw=1.0, alpha=0.3, zorder=1)
         ax.axhline(0.5, color="gray", linestyle="--", lw=0.8, alpha=0.5)
         ax.set_xticks(range(len(CONDITIONS)))
@@ -115,11 +121,23 @@ def plot_bias_by_odor_identity(pairs_df: pd.DataFrame):
         if ai == 0:
             ax.set_ylabel("Average P(stop) in next block encounter")
         ax.text(
-            0.5, 1.1, "Prev: Rewarded", ha="center", va="bottom", fontsize=7.5, color="#8b0000",
+            0.5,
+            1.1,
+            "Prev: Rewarded",
+            ha="center",
+            va="bottom",
+            fontsize=7.5,
+            color="#8b0000",
             transform=ax.get_xaxis_transform(),
         )
         ax.text(
-            2.5, 1.1, "Prev: Not Rewarded", ha="center", va="bottom", fontsize=7.5, color="#1a5276",
+            2.5,
+            1.1,
+            "Prev: Not Rewarded",
+            ha="center",
+            va="bottom",
+            fontsize=7.5,
+            color="#1a5276",
             transform=ax.get_xaxis_transform(),
         )
     fig.tight_layout()

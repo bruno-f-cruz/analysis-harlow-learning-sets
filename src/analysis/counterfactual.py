@@ -53,7 +53,9 @@ def _style(value):
     try:
         return _VALUE_STYLES[value]
     except KeyError:
-        raise ValueError(f"value must be one of {sorted(_VALUE_STYLES)}, got {value!r}") from None
+        raise ValueError(
+            f"value must be one of {sorted(_VALUE_STYLES)}, got {value!r}"
+        ) from None
 
 
 def _require_value(matrix, value):
@@ -83,7 +85,9 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
     """
     rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
     rs = rs.sort_values(["session_id", "block", "start_time"])
-    subject_map = rs.drop_duplicates("session_id").set_index("session_id")["subject_id"].to_dict()
+    subject_map = (
+        rs.drop_duplicates("session_id").set_index("session_id")["subject_id"].to_dict()
+    )
 
     records = []
     for (session_id, block), grp in rs.groupby(["session_id", "block"], sort=False):
@@ -122,7 +126,9 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def counterfactual_session_matrix(trials: pd.DataFrame, min_blocks: int = 3) -> pd.DataFrame:
+def counterfactual_session_matrix(
+    trials: pd.DataFrame, min_blocks: int = 3
+) -> pd.DataFrame:
     """Per-session P(stop) for the four counterfactual conditions.
 
     Aggregates counterfactual_block_table over blocks within a session.
@@ -145,9 +151,9 @@ def counterfactual_session_matrix(trials: pd.DataFrame, min_blocks: int = 3) -> 
     long = long.dropna(subset=["stopped"])
 
     agg = (
-        long.groupby(["subject_id", "session_id", "first_stop_rewarded", "next_rewarded"])[
-            "stopped"
-        ]
+        long.groupby(
+            ["subject_id", "session_id", "first_stop_rewarded", "next_rewarded"]
+        )["stopped"]
         .agg(p_stop="mean", n_blocks="count")
         .reset_index()
     )
@@ -156,7 +162,9 @@ def counterfactual_session_matrix(trials: pd.DataFrame, min_blocks: int = 3) -> 
     # show up as gaps in the heatmap instead of silently shifting columns.
     sessions = agg[["subject_id", "session_id"]].drop_duplicates()
     grid = sessions.merge(
-        pd.DataFrame(COUNTERFACTUAL_CELL_KEYS, columns=["first_stop_rewarded", "next_rewarded"]),
+        pd.DataFrame(
+            COUNTERFACTUAL_CELL_KEYS, columns=["first_stop_rewarded", "next_rewarded"]
+        ),
         how="cross",
     )
     agg = grid.merge(
@@ -195,12 +203,16 @@ def counterfactual_window_matrix(
     """
     expanded = expand_to_block_windows(trials, window_blocks, skip_blocks)
     rekeyed = expanded.assign(
-        session_id=expanded["subject_id"].astype(str) + "_w" + expanded["window"].map("{:04d}".format),
+        session_id=expanded["subject_id"].astype(str)
+        + "_w"
+        + expanded["window"].map("{:04d}".format),
         block=expanded["block_ordinal"],
     )
     matrix = counterfactual_session_matrix(rekeyed, min_blocks=min_blocks)
     matrix["window"] = matrix["session_id"].str.rsplit("_w", n=1).str[1].astype(int)
-    bounds = expanded.drop_duplicates("window")[["window", "window_start", "window_end"]]
+    bounds = expanded.drop_duplicates("window")[
+        ["window", "window_start", "window_end"]
+    ]
     return matrix.merge(bounds, on="window", how="left")
 
 
@@ -246,7 +258,9 @@ def plot_counterfactual_heatmap(
     _require_value(matrix, value)
 
     subjects = sorted(matrix["subject_id"].unique())
-    max_rows = max(matrix[matrix["subject_id"] == s]["session_id"].nunique() for s in subjects)
+    max_rows = max(
+        matrix[matrix["subject_id"] == s]["session_id"].nunique() for s in subjects
+    )
     cmap = style["cmap"]
 
     fig, axes = plt.subplots(
@@ -260,12 +274,17 @@ def plot_counterfactual_heatmap(
     for ax, subject in zip(axes[0], subjects):
         grid, sessions, counts = _pivot(matrix, subject, value)
         images.append(
-            ax.imshow(grid, cmap=cmap, vmin=0, vmax=1, aspect="auto", interpolation="nearest")
+            ax.imshow(
+                grid, cmap=cmap, vmin=0, vmax=1, aspect="auto", interpolation="nearest"
+            )
         )
         ax.grid(False)
         ax.set_xticks(range(len(COUNTERFACTUAL_CELLS)))
         ax.set_xticklabels(
-            [label for _, _, label, _ in COUNTERFACTUAL_CELLS], rotation=45, ha="right", fontsize=7
+            [label for _, _, label, _ in COUNTERFACTUAL_CELLS],
+            rotation=45,
+            ha="right",
+            fontsize=7,
         )
         ax.set_yticks(range(len(sessions)))
         ax.set_yticklabels([row_label_fn(s) for s in sessions], fontsize=6)
@@ -281,7 +300,15 @@ def plot_counterfactual_heatmap(
                 for c in range(grid.shape[1]):
                     v = grid[r, c]
                     if np.isnan(v):
-                        ax.text(c, r, "·", ha="center", va="center", color="gray", fontsize=8)
+                        ax.text(
+                            c,
+                            r,
+                            "·",
+                            ha="center",
+                            va="center",
+                            color="gray",
+                            fontsize=8,
+                        )
                         continue
                     ax.text(
                         c,
@@ -305,7 +332,9 @@ def plot_counterfactual_heatmap(
     return fig, matrix
 
 
-def counterfactual_cohort_average(matrix, value="accuracy", min_animals=1, rng=None, n_boot=2000):
+def counterfactual_cohort_average(
+    matrix, value="accuracy", min_animals=1, rng=None, n_boot=2000
+):
     """Average counterfactual_session_matrix across mice per session number.
 
     Sessions are aligned by session_index -- each animal's own 0-based
@@ -337,7 +366,16 @@ def counterfactual_cohort_average(matrix, value="accuracy", min_animals=1, rng=N
         )
     agg = pd.DataFrame.from_records(
         records,
-        columns=["session_index", "first_stop_rewarded", "next_rewarded", "mean", "ci_lo", "ci_hi", "n_animals", "n_blocks"],
+        columns=[
+            "session_index",
+            "first_stop_rewarded",
+            "next_rewarded",
+            "mean",
+            "ci_lo",
+            "ci_hi",
+            "n_animals",
+            "n_blocks",
+        ],
     )
     return agg[agg["n_animals"] >= min_animals].reset_index(drop=True)
 
@@ -378,7 +416,10 @@ def plot_counterfactual_cohort_average(
     def _strip(series):
         """(4, n_sessions) array: one row per condition, one column per session."""
         return np.array(
-            [[series.get((s, *key), np.nan) for s in session_indices] for key in COUNTERFACTUAL_CELL_KEYS],
+            [
+                [series.get((s, *key), np.nan) for s in session_indices]
+                for key in COUNTERFACTUAL_CELL_KEYS
+            ],
             dtype=float,
         )
 
@@ -418,10 +459,17 @@ def plot_counterfactual_cohort_average(
                 if np.isnan(v):
                     continue
                 ax_hm.text(
-                    s, r, f"{v:.2f}", ha="center", va="center", fontsize=5,
+                    s,
+                    r,
+                    f"{v:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=5,
                     color=_text_color(v, style["cmap"]),
                 )
-    fig.colorbar(im, ax=(ax_hm, ax_ln), fraction=0.02, pad=0.01).set_label(style["label"], fontsize=9)
+    fig.colorbar(im, ax=(ax_hm, ax_ln), fraction=0.02, pad=0.01).set_label(
+        style["label"], fontsize=9
+    )
 
     # ── bottom: the same four rows as cohort timecourses ───────────────────
     xs = np.asarray(session_indices, dtype=float)
@@ -460,7 +508,14 @@ def plot_counterfactual_cohort_average(
     spans += [(x - 0.5, x + 0.5) for x in xs[:tail][thin[:tail]]]
     for ax, legend_label in ((ax_hm, None), (ax_ln, "< half the cohort")):
         for i, (x0, x1) in enumerate(spans):
-            ax.axvspan(x0, x1, color="gray", alpha=0.12, zorder=0, label=legend_label if i == 0 else None)
+            ax.axvspan(
+                x0,
+                x1,
+                color="gray",
+                alpha=0.12,
+                zorder=0,
+                label=legend_label if i == 0 else None,
+            )
     if tail < len(xs):
         ax_hm.axvline(xs[tail] - 0.5, color="black", lw=1.2, alpha=0.6)
         ax_ln.axvline(xs[tail] - 0.5, color="black", lw=1.2, alpha=0.6)
@@ -475,7 +530,9 @@ def plot_counterfactual_cohort_average(
 
     ax_top = ax_hm.secondary_xaxis("top")
     ax_top.set_xticks(session_indices)
-    ax_top.set_xticklabels([str(int(n)) if np.isfinite(n) else "" for n in n_per_session], fontsize=5.5)
+    ax_top.set_xticklabels(
+        [str(int(n)) if np.isfinite(n) else "" for n in n_per_session], fontsize=5.5
+    )
     ax_top.set_xlabel(
         "animals contributing (max over the 4 conditions; a cell below "
         "min_blocks drops out, so this can dip and recover)",
@@ -511,18 +568,32 @@ def plot_counterfactual_cohort_by_condition(
     cohort = counterfactual_cohort_average(matrix, value=value, min_animals=min_animals)
 
     fig, axes = plt.subplots(
-        1, len(COUNTERFACTUAL_CELLS), figsize=(6 * len(COUNTERFACTUAL_CELLS), 4),
-        sharey=True, sharex=True, squeeze=False,
+        1,
+        len(COUNTERFACTUAL_CELLS),
+        figsize=(6 * len(COUNTERFACTUAL_CELLS), 4),
+        sharey=True,
+        sharex=True,
+        squeeze=False,
     )
     for ax, (fsr, nr, label, _), color, ideal in zip(
         axes[0], COUNTERFACTUAL_CELLS, COUNTERFACTUAL_COLORS, style["ideal"]
     ):
-        cond = matrix[(matrix["first_stop_rewarded"] == fsr) & (matrix["next_rewarded"] == nr)]
+        cond = matrix[
+            (matrix["first_stop_rewarded"] == fsr) & (matrix["next_rewarded"] == nr)
+        ]
         for subject in subjects:
-            sub = cond[cond["subject_id"] == subject].dropna(subset=[value]).sort_values("session_index")
+            sub = (
+                cond[cond["subject_id"] == subject]
+                .dropna(subset=[value])
+                .sort_values("session_index")
+            )
             ax.plot(
-                sub["session_index"], sub[value], color=subject_colors[subject],
-                linewidth=1, alpha=0.4, label=f"Subject {subject}",
+                sub["session_index"],
+                sub[value],
+                color=subject_colors[subject],
+                linewidth=1,
+                alpha=0.4,
+                label=f"Subject {subject}",
             )
 
         cohort_cond = cohort[
@@ -550,7 +621,9 @@ def plot_counterfactual_cohort_by_condition(
 def counterfactual_session_trends(matrix, value="accuracy"):
     """Per-subject, per-condition OLS slope of `value` against session index."""
     rows = []
-    for (subject, fsr, nr), grp in matrix.groupby(["subject_id", "first_stop_rewarded", "next_rewarded"]):
+    for (subject, fsr, nr), grp in matrix.groupby(
+        ["subject_id", "first_stop_rewarded", "next_rewarded"]
+    ):
         g = grp.dropna(subset=[value]).sort_values("session_index")
         if len(g) < 3:
             continue
@@ -571,7 +644,9 @@ def counterfactual_session_trends(matrix, value="accuracy"):
     return pd.DataFrame(rows)
 
 
-def plot_counterfactual_trends_per_animal(cf_window: pd.DataFrame, window_blocks: int, skip_blocks: int):
+def plot_counterfactual_trends_per_animal(
+    cf_window: pd.DataFrame, window_blocks: int, skip_blocks: int
+):
     """Per-subject accuracy timecourse across block windows, with an OLS trend line.
 
     ``cf_window``'s ``session_index`` already equals its window number (see
@@ -581,16 +656,27 @@ def plot_counterfactual_trends_per_animal(cf_window: pd.DataFrame, window_blocks
     from matplotlib.ticker import MaxNLocator
 
     subjects = sorted(cf_window["subject_id"].unique())
-    fig, axes = plt.subplots(1, len(subjects), figsize=(4.2 * len(subjects), 4), sharey=True, squeeze=False)
+    fig, axes = plt.subplots(
+        1, len(subjects), figsize=(4.2 * len(subjects), 4), sharey=True, squeeze=False
+    )
     for ax, subject in zip(axes[0], subjects):
         sub = cf_window[cf_window["subject_id"] == subject]
-        for (fsr, nr, label, _), color in zip(COUNTERFACTUAL_CELLS, COUNTERFACTUAL_COLORS):
+        for (fsr, nr, label, _), color in zip(
+            COUNTERFACTUAL_CELLS, COUNTERFACTUAL_COLORS
+        ):
             g = (
                 sub[(sub["first_stop_rewarded"] == fsr) & (sub["next_rewarded"] == nr)]
                 .dropna(subset=["accuracy"])
                 .sort_values("window")
             )
-            ax.plot(g["window"], g["accuracy"], marker="o", ms=4, color=color, label=label.replace("\n", " "))
+            ax.plot(
+                g["window"],
+                g["accuracy"],
+                marker="o",
+                ms=4,
+                color=color,
+                label=label.replace("\n", " "),
+            )
             if len(g) >= 3:
                 x = g["window"].to_numpy(dtype=float)
                 m, b = np.polyfit(x, g["accuracy"].to_numpy(dtype=float), 1)
@@ -598,16 +684,22 @@ def plot_counterfactual_trends_per_animal(cf_window: pd.DataFrame, window_blocks
         ax.axhline(0.5, color="gray", ls=":", lw=1)
         ax.set_ylim(0, 1.05)
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.set_xlabel(f"Block-window number ({window_blocks} blocks, stride {skip_blocks})")
+        ax.set_xlabel(
+            f"Block-window number ({window_blocks} blocks, stride {skip_blocks})"
+        )
         ax.set_title(f"Subject {subject}", fontsize=10)
     axes[0][0].set_ylabel("accuracy (higher = better)")
     axes[0][-1].legend(frameon=False, fontsize=7, loc="lower right")
-    fig.suptitle("Counterfactual accuracy across block windows (dashed = OLS fit)", fontsize=11)
+    fig.suptitle(
+        "Counterfactual accuracy across block windows (dashed = OLS fit)", fontsize=11
+    )
     fig.tight_layout()
     return fig
 
 
-def first_site_chance_by_window(trials: pd.DataFrame, window_blocks: int, skip_blocks: int) -> pd.DataFrame:
+def first_site_chance_by_window(
+    trials: pd.DataFrame, window_blocks: int, skip_blocks: int
+) -> pd.DataFrame:
     """P(stop) at each block's very first RewardSite encounter, per animal per window.
 
     By that first site the animal has zero evidence yet about *this* block's
@@ -621,10 +713,14 @@ def first_site_chance_by_window(trials: pd.DataFrame, window_blocks: int, skip_b
     rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
     rs = rs.sort_values(["session_id", "block", "start_time"])
     rs = rs.assign(_block_pos=rs.groupby(["session_id", "block"]).cumcount())
-    first_site = rs[rs["_block_pos"] == 0][["session_id", "block", "has_choice"]].rename(
-        columns={"has_choice": "stopped_first_site"}
-    )
+    first_site = rs[rs["_block_pos"] == 0][
+        ["session_id", "block", "has_choice"]
+    ].rename(columns={"has_choice": "stopped_first_site"})
 
     windows_map = block_window_index(trials, window_blocks, skip_blocks)
     blocks = windows_map.merge(first_site, on=["session_id", "block"], how="inner")
-    return blocks.groupby(["subject_id", "window"])["stopped_first_site"].mean().reset_index()
+    return (
+        blocks.groupby(["subject_id", "window"])["stopped_first_site"]
+        .mean()
+        .reset_index()
+    )

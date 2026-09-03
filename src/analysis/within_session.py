@@ -15,7 +15,9 @@ import matplotlib.pyplot as plt
 from analysis.plotting import bootstrap_group_stats
 
 
-def within_session_block_bins(trials: pd.DataFrame, bin_minutes: float = 15.0) -> pd.DataFrame:
+def within_session_block_bins(
+    trials: pd.DataFrame, bin_minutes: float = 15.0
+) -> pd.DataFrame:
     """Tag every kept block with the time bin its start falls into, relative
     to its own session's start -- so blocks from different sessions align on
     a shared "time since session start" axis. Also adds ``is_correct``: did
@@ -40,7 +42,9 @@ def within_session_block_bins(trials: pd.DataFrame, bin_minutes: float = 15.0) -
     return rs
 
 
-def within_session_performance_gap(trials: pd.DataFrame, bin_minutes: float = 15.0) -> pd.DataFrame:
+def within_session_performance_gap(
+    trials: pd.DataFrame, bin_minutes: float = 15.0
+) -> pd.DataFrame:
     """Per (subject, session, time_bin) accuracy and gap from optimal.
 
     Optimal is P(correct) = 1 in every bin; ``gap_from_optimal`` = 1 -
@@ -64,7 +68,9 @@ def within_session_performance_gap(trials: pd.DataFrame, bin_minutes: float = 15
     return per_session_bin
 
 
-def plot_within_session_performance(per_session_bin: pd.DataFrame, bin_minutes: float = 15.0):
+def plot_within_session_performance(
+    per_session_bin: pd.DataFrame, bin_minutes: float = 15.0
+):
     """Per-animal gap-from-optimal across time-since-session-start bins:
     individual sessions faint, cross-session mean +/- bootstrapped 95% CI
     shaded -- same treatment as the other cohort plots in this codebase.
@@ -78,8 +84,13 @@ def plot_within_session_performance(per_session_bin: pd.DataFrame, bin_minutes: 
     subjects = sorted(per_session_bin["subject_id"].unique())
 
     fig, axes = plt.subplots(
-        1, len(subjects), figsize=(4.5 * len(subjects), 4.5), sharey=True, sharex=True,
-        squeeze=False, constrained_layout=True,
+        1,
+        len(subjects),
+        figsize=(4.5 * len(subjects), 4.5),
+        sharey=True,
+        sharex=True,
+        squeeze=False,
+        constrained_layout=True,
     )
     for ax, subject in zip(axes[0], subjects):
         sub = per_session_bin[per_session_bin["subject_id"] == subject]
@@ -98,7 +109,9 @@ def plot_within_session_performance(per_session_bin: pd.DataFrame, bin_minutes: 
         mean = sub_cohort["mean"].to_numpy()
         ci_lo = sub_cohort["ci_lo"].to_numpy()
         ci_hi = sub_cohort["ci_hi"].to_numpy()
-        ax.plot(x, mean, color="#c0392b", linewidth=2.2, label="Cross-session mean ± 95% CI")
+        ax.plot(
+            x, mean, color="#c0392b", linewidth=2.2, label="Cross-session mean ± 95% CI"
+        )
         ax.fill_between(x, ci_lo, ci_hi, color="#c0392b", alpha=0.25, linewidth=0)
 
         ax.axhline(0, color="gray", ls="--", lw=0.8, alpha=0.6)

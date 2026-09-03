@@ -60,8 +60,12 @@ def history_glm_features(trials: pd.DataFrame) -> pd.DataFrame:
     prev_choice = rs["prev_has_choice"].astype(bool).to_numpy()
     prev_rewarded = rs["prev_has_reward"].astype(bool).to_numpy()
 
-    rs["IsPrevChoice_SameOdor"] = np.where(is_same, np.where(prev_choice, 1.0, -1.0), 0.0)
-    rs["IsPrevChoice_OtherOdor"] = np.where(~is_same, np.where(prev_choice, 1.0, -1.0), 0.0)
+    rs["IsPrevChoice_SameOdor"] = np.where(
+        is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
+    rs["IsPrevChoice_OtherOdor"] = np.where(
+        ~is_same, np.where(prev_choice, 1.0, -1.0), 0.0
+    )
     rs["H_Same_Rew"] = (is_same & prev_rewarded).astype(float)
     rs["H_Same_NoRew"] = (is_same & ~prev_rewarded).astype(float)
     rs["H_Other_Rew"] = (~is_same & prev_rewarded).astype(float)
@@ -198,13 +202,20 @@ def plot_history_glm_reward_cells_by_window(
             )
         cohort[term] = (mean, ci_lo, ci_hi)
 
-    ci_bounds = np.concatenate([np.concatenate([lo, hi]) for _, lo, hi in cohort.values()])
+    ci_bounds = np.concatenate(
+        [np.concatenate([lo, hi]) for _, lo, hi in cohort.values()]
+    )
     ci_bounds = ci_bounds[~np.isnan(ci_bounds)]
     val_max = np.nanpercentile(np.abs(ci_bounds), 90) if ci_bounds.size else 1.0
     ylim = max(val_max * 1.3, 1.0)
 
     fig, axes = plt.subplots(
-        1, len(terms), figsize=(6 * len(terms), 4), sharey=True, sharex=True, squeeze=False
+        1,
+        len(terms),
+        figsize=(6 * len(terms), 4),
+        sharey=True,
+        sharex=True,
+        squeeze=False,
     )
     for ai, (ax, term) in enumerate(zip(axes[0], terms)):
         style = all_terms[term]
@@ -236,7 +247,9 @@ def plot_history_glm_reward_cells_by_window(
             color=style["color"],
             label="Cohort mean, bootstrapped 95% CI",
         )
-        ax.fill_between(x[ok], lo[ok], hi[ok], color=style["color"], alpha=0.25, linewidth=0)
+        ax.fill_between(
+            x[ok], lo[ok], hi[ok], color=style["color"], alpha=0.25, linewidth=0
+        )
         clip_hi = ok & (ci_hi > ylim)
         clip_lo = ok & (ci_lo < -ylim)
         if np.any(clip_hi):

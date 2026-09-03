@@ -245,6 +245,37 @@ def pooled_block_ordinal(trials: pd.DataFrame) -> pd.DataFrame:
     return keys
 
 
+def blocks_first_last_tags(trials: pd.DataFrame, n_blocks: int = 200) -> pd.DataFrame:
+    """RewardSite trials from each animal's first/last ``n_blocks`` blocks
+    (pooled chronologically across sessions, see :func:`pooled_block_ordinal`).
+
+    Adds a ``block_range`` column ("first" or "last"); trials in neither
+    window are dropped. An animal with fewer than ``2 * n_blocks`` blocks has
+    its middle blocks claimed by "first" before "last" is considered, so the
+    "last" window comes up short there rather than the two overlapping.
+    """
+    ordinals = pooled_block_ordinal(trials)
+    max_ordinal = ordinals.groupby("subject_id")["block_ordinal"].transform("max")
+    ordinals = ordinals.assign(
+        block_range=np.select(
+            [
+                ordinals["block_ordinal"] < n_blocks,
+                ordinals["block_ordinal"] > max_ordinal - n_blocks,
+            ],
+            ["first", "last"],
+            default=None,
+        )
+    )
+    ordinals = ordinals[ordinals["block_range"].notna()]
+
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    return rs.merge(
+        ordinals[["subject_id", "session_id", "block", "block_range"]],
+        on=["subject_id", "session_id", "block"],
+        how="inner",
+    )
+
+
 def block_window_index(
     trials: pd.DataFrame, window_blocks: int, skip_blocks: int
 ) -> pd.DataFrame:
