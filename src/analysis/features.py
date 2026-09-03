@@ -1,92 +1,12 @@
 """Generic, reusable data-prep / feature-construction helpers for the trials frame.
 
-Moved out of the old top-level ``helpers.py`` (see
-``docs/plans/2026-08-11-dockerized-analysis-environment.md``, Task 9.2). Only
-the pieces that are pure data transformation (no plotting) and used by more
-than one downstream consumer live here. The GLM-fitting / bias / counterfactual
-*analysis* itself is intentionally **not** here -- that composition stays
-inline in the ``demo_marimo.py`` notebook cells that use it (a future task is
-expected to rename that file to ``workflows/analysis.py``).
+Pure data transformation, no plotting. The GLM-fitting, odor-identity-bias
+and counterfactual analyses each have their own module
+(:mod:`analysis.glm`, :mod:`analysis.bias`, :mod:`analysis.counterfactual`).
 """
 
 import numpy as np
 import pandas as pd
-
-# ─── Subject corrections ──────────────────────────────────────────────────────
-#
-# A session_id here is the data asset name, which happens to start with a subject
-# id. For a few sessions that prefix is wrong -- the session was acquired under
-# the wrong subject in the rig metadata. Upstream deliberately does NOT rename the
-# assets (the name is only a unique key and is not meant to be parsed), so the
-# correction has to be applied at load time on our side.
-#
-# https://github.com/AllenNeuralDynamics/aind-scientific-computing/issues/855
-
-#: ``{session_id: correct_subject_id}``. Keep the session_id keys exactly as they
-#: appear in the parquet; entries that match nothing are harmless, so a fix can be
-#: recorded here before the corresponding session has been synced locally.
-SESSION_SUBJECT_OVERRIDES = {
-    # issue #855, first report: metadata subject was 841312
-    "841312_2026-07-07_20-38-00": "866063",
-    # issue #855, follow-up comment: metadata subject was 841299
-    "841299_2026-07-29_17-02-58": "864846",
-}
-
-
-def subject_id_for(session_ids):
-    """Correct subject id(s) for ``session_ids``, applying the #855 overrides.
-
-    Accepts a single session_id or any Series/sequence of them, and returns the
-    same shape (a ``str`` for scalar input, a ``Series`` of ``str`` otherwise).
-    Never parse the subject out of a session_id directly -- use this, or the
-    ``subject_id`` column that :func:`add_subject_id` writes.
-    """
-    if isinstance(session_ids, str):
-        return SESSION_SUBJECT_OVERRIDES.get(session_ids, session_ids.split("_")[0])
-    s = pd.Series(session_ids, dtype="object").astype(str)
-    return (
-        s.str.split("_")
-        .str[0]
-        .mask(s.isin(SESSION_SUBJECT_OVERRIDES), s.map(SESSION_SUBJECT_OVERRIDES))
-    )
-
-
-def add_subject_id(df: pd.DataFrame, session_col: str = "session_id") -> pd.DataFrame:
-    """Return ``df`` with a corrected ``subject_id`` column (overwrites if present).
-
-    This is the *only* place the correction is applied: call it once, right after
-    loading the trials, and every frame derived from that one carries the column.
-    The helpers below just group by ``subject_id`` and never re-derive it, so a
-    frame that skipped this step raises ``KeyError`` there rather than quietly
-    grouping by the wrong name prefix.
-    """
-    out = df.copy()
-    out["subject_id"] = subject_id_for(out[session_col]).to_numpy()
-    return out
-
-
-def report_subject_overrides(df: pd.DataFrame) -> pd.DataFrame:
-    """Which :data:`SESSION_SUBJECT_OVERRIDES` actually applied to ``df``.
-
-    Returns one row per override with ``session_id``, ``name_prefix`` (the wrong
-    subject still in the asset name), ``corrected_to`` and ``n_rows`` (0 when that
-    session is not present locally). Print it after loading so a correction that
-    silently stops matching -- e.g. because an asset was renamed after all -- is
-    visible rather than assumed.
-    """
-    present = set(df["session_id"].unique())
-    return pd.DataFrame(
-        [
-            {
-                "session_id": sid,
-                "name_prefix": sid.split("_")[0],
-                "corrected_to": subject,
-                "n_rows": int((df["session_id"] == sid).sum()),
-                "present": sid in present,
-            }
-            for sid, subject in SESSION_SUBJECT_OVERRIDES.items()
-        ]
-    )
 
 
 def assign_blocks(trials: pd.DataFrame, block_size: int = 10) -> pd.DataFrame:
@@ -132,16 +52,120 @@ def trim_sessions(
     return pd.concat(kept) if kept else trials.iloc[:0]
 
 
+def prepare_trials(
+    trials: pd.DataFrame,
+    session_table: pd.DataFrame,
+    min_session_minutes: float = 15.0,
+    degenerate_margin: float = 0.1,
+    start_frac: float = 0.0,
+    end_frac: float = 1.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Merge in ``subject_id``, assign blocks, and derive the columns most
+    analyses need, from a raw ``sites`` table plus its session-level table.
+
+    ``start_frac``/``end_frac`` trim each session to that fractional window
+    (see :func:`trim_sessions`) before anything else is derived -- e.g.
+    ``start_frac=0.1, end_frac=0.9`` drops the first and last 10% of every
+    session.
+
+    Returns ``(trials, trials_all)``: ``trials`` has degenerate blocks
+    (``p_stay_in_block`` within ``degenerate_margin`` of 0 or 1) dropped;
+    ``trials_all`` is the same frame *before* that filter, for analyses that
+    need the degenerate blocks too (e.g. within-session performance decay,
+    where "stops at everything" late in a session is exactly the effect
+    being looked for, not noise to discard).
+    """
+    trials = trials.merge(
+        session_table[["session_id", "subject_id"]],
+        on="session_id",
+        how="left",
+        validate="many_to_one",
+    )
+    missing_subject = trials["subject_id"].isna()
+    if missing_subject.any():
+        raise ValueError(
+            "No subject_id in the session table for session_id(s): "
+            f"{sorted(trials.loc[missing_subject, 'session_id'].unique())}"
+        )
+    trials = assign_blocks(trials)
+
+    # Drop sessions shorter than min_session_minutes (first to last site timestamp)
+    session_start = trials.groupby("session_id")["start_time"].min()
+    session_end = trials.groupby("session_id")["start_time"].max()
+    session_duration = session_end - session_start
+    threshold = (
+        pd.Timedelta(minutes=min_session_minutes)
+        if pd.api.types.is_timedelta64_dtype(session_duration)
+        else min_session_minutes * 60
+    )
+    long_sessions = session_duration[session_duration >= threshold].index
+    trials = trials[trials["session_id"].isin(long_sessions)]
+    trials = trim_sessions(trials, start_frac=start_frac, end_frac=end_frac)
+
+    def _is_rewarded(patch_label: str) -> bool:
+        return "NonRewarded" not in patch_label
+
+    def _odor_index(odor_concentration) -> int:
+        return np.argmax(np.array(odor_concentration))
+
+    trials["is_rewarded_odor"] = trials["patch_label"].apply(_is_rewarded)
+    trials["odor_index"] = trials["odor_concentration"].apply(_odor_index)
+
+    # Per-block P(stay): fraction of a block's RewardSite trials the animal stopped.
+    rs_mask = (trials["site_label"] == "RewardSite") & trials["block"].notna()
+    trials["p_stay_in_block"] = (
+        trials[rs_mask].groupby(["session_id", "block"])["has_choice"].transform("mean")
+    )
+
+    trials_all = trials.copy(deep=False)
+
+    block_p_stay = trials[rs_mask].groupby(["session_id", "block"])["has_choice"].mean()
+    is_degenerate_block = (block_p_stay <= degenerate_margin) | (
+        block_p_stay >= 1 - degenerate_margin
+    )
+    excluded_per_session = is_degenerate_block.groupby(level="session_id").agg(
+        excluded="sum", total="count"
+    )
+    excluded_per_session["kept"] = (
+        excluded_per_session["total"] - excluded_per_session["excluded"]
+    )
+    print(
+        f"Blocks excluded per session (p_stay <= {degenerate_margin} or "
+        f">= {1 - degenerate_margin}):"
+    )
+    print(excluded_per_session.to_string())
+    print(
+        f"\nTotal: excluding {excluded_per_session['excluded'].sum()} "
+        f"of {excluded_per_session['total'].sum()} blocks"
+    )
+
+    # NaN (non-RewardSite / unblocked rows) must survive this filter -- both
+    # comparisons below are False for NaN, so `~` keeps them.
+    row_is_degenerate = (trials["p_stay_in_block"] <= degenerate_margin) | (
+        trials["p_stay_in_block"] >= 1 - degenerate_margin
+    )
+    trials = trials[~row_is_degenerate]
+
+    return trials, trials_all
+
+
+#: Trials beyond the 5th occurrence of an odor type within a block are
+#: dropped -- most blocks cap each type at 5, and stages with a higher cap
+#: (e.g. 8Rew/10NonRew) would otherwise skew appearance-indexed plots with
+#: occurrences the majority of blocks never reach.
+MAX_APPEARANCE = 5
+
+
 def appearance_table(
     trials: pd.DataFrame, from_first_stop: bool = False
 ) -> pd.DataFrame:
     """Return RewardSite trials (kept blocks only) with an ``appearance`` column.
 
-    ``appearance`` is the within-block, per-odor index (0-4). When
-    ``from_first_stop`` is True the index origin is each block's first stop and
-    trials before it are dropped (blocks with no stop are dropped entirely).
-    Shared by the choice-by-block-position plots so they all count appearances
-    identically.
+    ``appearance`` is the within-block, per-odor index (0-4; occurrences past
+    ``MAX_APPEARANCE`` are dropped). When ``from_first_stop`` is True the
+    index origin is each block's first stop and trials before it are dropped
+    (blocks with no stop are dropped entirely). Shared by the
+    choice-by-block-position plots so they all count appearances identically.
     """
     rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()].copy()
     rs = rs.sort_values(["session_id", "block", "start_time"])
@@ -161,7 +185,7 @@ def appearance_table(
     rs["appearance"] = rs.groupby(
         ["session_id", "block", "is_rewarded_odor"]
     ).cumcount()
-    return rs
+    return rs[rs["appearance"] < MAX_APPEARANCE]
 
 
 def label_first_stop(trials: pd.DataFrame) -> pd.DataFrame:
@@ -219,6 +243,37 @@ def pooled_block_ordinal(trials: pd.DataFrame) -> pd.DataFrame:
     )
     keys["block_ordinal"] = keys.groupby("subject_id").cumcount()
     return keys
+
+
+def blocks_first_last_tags(trials: pd.DataFrame, n_blocks: int = 200) -> pd.DataFrame:
+    """RewardSite trials from each animal's first/last ``n_blocks`` blocks
+    (pooled chronologically across sessions, see :func:`pooled_block_ordinal`).
+
+    Adds a ``block_range`` column ("first" or "last"); trials in neither
+    window are dropped. An animal with fewer than ``2 * n_blocks`` blocks has
+    its middle blocks claimed by "first" before "last" is considered, so the
+    "last" window comes up short there rather than the two overlapping.
+    """
+    ordinals = pooled_block_ordinal(trials)
+    max_ordinal = ordinals.groupby("subject_id")["block_ordinal"].transform("max")
+    ordinals = ordinals.assign(
+        block_range=np.select(
+            [
+                ordinals["block_ordinal"] < n_blocks,
+                ordinals["block_ordinal"] > max_ordinal - n_blocks,
+            ],
+            ["first", "last"],
+            default=None,
+        )
+    )
+    ordinals = ordinals[ordinals["block_range"].notna()]
+
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    return rs.merge(
+        ordinals[["subject_id", "session_id", "block", "block_range"]],
+        on=["subject_id", "session_id", "block"],
+        how="inner",
+    )
 
 
 def block_window_index(

@@ -1,21 +1,82 @@
 """Matplotlib plot-drawing / styling helpers shared across the notebook's cells.
 
-Moved out of the old top-level ``viz_helpers.py`` and ``helpers.py`` (see
-``docs/plans/2026-08-11-dockerized-analysis-environment.md``, Task 9.2). This
-holds ``a_lot_of_style`` plus the generic "choice by block position" plotting
-family, which is reused across several notebook cells and carries no
-research-question-specific interpretation of its own (unlike the GLM-fitting /
-bias / counterfactual analysis, which is intentionally left inline in the
-``demo_marimo.py`` notebook; a future task is expected to rename that file to
-``workflows/analysis.py``).
+Holds ``a_lot_of_style`` plus the generic "choice by block position" plotting
+family, reused across several notebook cells with no research-question-
+specific interpretation of its own. Plots specific to one analysis (GLM,
+bias, counterfactual) live alongside that analysis's data prep instead --
+see :mod:`analysis.glm`, :mod:`analysis.bias`, :mod:`analysis.counterfactual`.
 """
 
 from contextlib import contextmanager
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from analysis.features import appearance_table, label_first_stop
+from analysis.features import appearance_table, blocks_first_last_tags, label_first_stop
+
+#: Shared 2x2 condition palette (dark red, orange, dark blue, light blue/cyan)
+#: -- reused verbatim by every plot that splits on two reward-related
+#: booleans (:mod:`analysis.counterfactual`, :mod:`analysis.bias`,
+#: :mod:`analysis.glm`) so the same color always means the same condition
+#: across figures. Order is (True, True), (True, False), (False, True),
+#: (False, False) for whatever two booleans a given plot uses.
+TWO_BY_TWO_COLORS = ["#c0392b", "#e07b39", "#1a5276", "#4f8fc0"]
+
+
+def bootstrap_mean_ci(values, rng, min_n=2, n_boot=2000):
+    """Percentile-bootstrap ``(mean, ci_lo, ci_hi)`` across the entries of ``values``.
+
+    NaN below ``min_n`` non-NaN values -- too few to bootstrap a spread from
+    (n=1 would just resample itself every draw) -- so the caller should treat
+    NaN as "leave a gap", not a zero-width CI. Pass one shared ``rng`` across
+    a whole sweep of calls for a reproducible run. This is the codebase's one
+    CI statistic -- no plot here uses a SEM/normal-approximation band.
+    """
+    values = np.asarray(values, dtype=float)
+    values = values[~np.isnan(values)]
+    if values.size < min_n:
+        return np.nan, np.nan, np.nan
+    boot_means = values[rng.integers(0, values.size, size=(n_boot, values.size))].mean(
+        axis=1
+    )
+    lo, hi = np.percentile(boot_means, [2.5, 97.5])
+    return values.mean(), lo, hi
+
+
+def bootstrap_group_stats(
+    values: pd.Series, keys, rng, min_n=2, n_boot=2000
+) -> pd.DataFrame:
+    """Bootstrapped 95% CI of ``values`` grouped by ``keys`` (a column/Series,
+    or a list of them for a multi-key grouping).
+
+    Returns a frame indexed like ``values.groupby(keys)`` -- a plain Index for
+    a single key, a named ``MultiIndex`` for several -- with ``mean``,
+    ``ci_lo``, ``ci_hi`` columns. Call ``.reset_index()`` to get the group
+    key(s) back as columns.
+    """
+    index, rows = [], []
+    for key, grp in values.groupby(keys):
+        index.append(key)
+        rows.append(
+            bootstrap_mean_ci(
+                grp.to_numpy(dtype=float), rng, min_n=min_n, n_boot=n_boot
+            )
+        )
+
+    if isinstance(keys, (list, tuple)):
+        names = [k.name if isinstance(k, pd.Series) else k for k in keys]
+        idx = pd.MultiIndex.from_tuples(index, names=names)
+    else:
+        idx = pd.Index(index, name=keys.name if isinstance(keys, pd.Series) else keys)
+    return pd.DataFrame(rows, index=idx, columns=["mean", "ci_lo", "ci_hi"])
+
+
+def ci_errorbar(stats: pd.DataFrame) -> np.ndarray:
+    """(2, n) ``yerr`` array from a ``mean``/``ci_lo``/``ci_hi`` frame, floored at 0."""
+    lower = (stats["mean"] - stats["ci_lo"]).clip(lower=0).fillna(0)
+    upper = (stats["ci_hi"] - stats["mean"]).clip(lower=0).fillna(0)
+    return np.vstack([lower, upper])
 
 
 @contextmanager
@@ -80,7 +141,8 @@ def plot_choice_by_block_position(
     index within each block is computed *separately* for the rewarded and the
     non-rewarded odor (0-4, since each odor appears 5 times per block of 10).
     The mean ``has_choice`` is then plotted against that index, giving two series
-    -- one for ``is_rewarded_odor`` True and one for False -- with SEM error bars.
+    -- one for ``is_rewarded_odor`` True and one for False -- with bootstrapped
+    95% CI error bars (across trials at that appearance index).
 
     When ``from_first_stop`` is True, the index origin is the block's first stop
     instead of the block start: trials before the first stop (first ``has_choice``)
@@ -96,14 +158,15 @@ def plot_choice_by_block_position(
     if ax is None:
         _, ax = plt.subplots(figsize=(5, 4))
 
+    rng = np.random.default_rng(0)
     colors = colors if colors is not None else {True: "tab:orange", False: "tab:blue"}
     for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
-        stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
+        stats = bootstrap_group_stats(grp["has_choice"], grp["appearance"], rng)
         label = "Rewarded odor" if is_rewarded else "Non-rewarded odor"
         ax.errorbar(
             stats.index,
             stats["mean"],
-            yerr=stats["sem"],
+            yerr=ci_errorbar(stats),
             marker="o",
             capsize=3,
             label=label,
@@ -133,6 +196,7 @@ def _plot_sessions_on_ax(
     STRIDE = N_APP + GAP
     sessions = sorted(sub["session_id"].unique())
     seen = {True: False, False: False}
+    rng = np.random.default_rng(0)
 
     for s_idx, session_id in enumerate(sessions):
         rs = appearance_table(
@@ -141,7 +205,7 @@ def _plot_sessions_on_ax(
         x_offset = s_idx * STRIDE
 
         for is_rewarded, grp in rs.groupby("is_rewarded_odor"):
-            stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
+            stats = bootstrap_group_stats(grp["has_choice"], grp["appearance"], rng)
             if stats.empty:
                 continue
             label = (
@@ -152,7 +216,7 @@ def _plot_sessions_on_ax(
             ax.errorbar(
                 stats.index + x_offset,
                 stats["mean"],
-                yerr=stats["sem"],
+                yerr=ci_errorbar(stats),
                 marker="o",
                 capsize=3,
                 color=colors[bool(is_rewarded)],
@@ -391,6 +455,7 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
             shades = [0.35 + 0.65 * (i / max(n - 1, 1)) for i in range(n)]
             norm = Normalize(vmin=0, vmax=max(n - 1, 1))
 
+            rng = np.random.default_rng(0)
             fig, axes = plt.subplots(1, 2, figsize=(13, 4), sharey=True)
             for ax, (is_rewarded, title, cmap_name) in zip(axes, odor_panels):
                 cmap = plt.get_cmap(cmap_name)
@@ -401,11 +466,13 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
                     grp = rs[rs["is_rewarded_odor"] == is_rewarded]
                     if grp.empty:
                         continue
-                    stats = grp.groupby("appearance")["has_choice"].agg(["mean", "sem"])
+                    stats = bootstrap_group_stats(
+                        grp["has_choice"], grp["appearance"], rng
+                    )
                     ax.errorbar(
                         stats.index,
                         stats["mean"],
-                        yerr=stats["sem"],
+                        yerr=ci_errorbar(stats),
                         marker="o",
                         capsize=2,
                         color=cmap(shades[day]),
@@ -425,3 +492,55 @@ def plot_choice_by_block_position_by_first_stop_overlay(trials: pd.DataFrame):
             figures[(subject, condition)] = fig
 
     return figures
+
+
+def plot_naive_p_stop_first_last(trials: pd.DataFrame, n_blocks: int = 200):
+    """:func:`plot_choice_by_block_position`'s curve -- P(has_choice) against
+    within-block appearance, split by odor reward status -- but averaged
+    across animals (each animal contributes its own per-appearance mean, and
+    the cohort mean +/- bootstrapped 95% CI across animals is drawn), and
+    with one subplot for each animal's first vs last ``n_blocks`` blocks
+    (see :func:`analysis.features.blocks_first_last_tags`) instead of per
+    session.
+    """
+    tagged = appearance_table(blocks_first_last_tags(trials, n_blocks=n_blocks))
+    per_animal = (
+        tagged.groupby(["block_range", "is_rewarded_odor", "appearance", "subject_id"])[
+            "has_choice"
+        ]
+        .mean()
+        .reset_index()
+    )
+
+    rng = np.random.default_rng(0)
+    colors = {True: "tab:orange", False: "tab:blue"}
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharey=True)
+    for ax, block_range in zip(axes, ["first", "last"]):
+        sub = per_animal[per_animal["block_range"] == block_range]
+        for is_rewarded, grp in sub.groupby("is_rewarded_odor"):
+            stats = bootstrap_group_stats(grp["has_choice"], grp["appearance"], rng)
+            label = "Rewarded odor" if is_rewarded else "Non-rewarded odor"
+            ax.errorbar(
+                stats.index,
+                stats["mean"],
+                yerr=ci_errorbar(stats),
+                marker="o",
+                capsize=3,
+                label=label,
+                color=colors[bool(is_rewarded)],
+            )
+        ax.set_xlabel("Appearance within block")
+        ax.set_xticks(range(5))
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"{block_range.capitalize()} {n_blocks} blocks")
+
+    axes[0].set_ylabel("P(has_choice)")
+    axes[0].legend()
+    fig.suptitle(
+        f"P(has_choice) by odor reward status, averaged across animals\n"
+        f"(first vs last {n_blocks} blocks, pooled chronologically across sessions; "
+        "error bars = bootstrapped 95% CI across animals)"
+    )
+    fig.tight_layout()
+    return fig
