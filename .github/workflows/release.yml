@@ -1,0 +1,160 @@
+name: Release — Lint, Test, Build & Publish Docker image
+
+# Triggers when you publish a GitHub Release.  The release tag (e.g. v1.2.3)
+# becomes the primary Docker image tag; `latest` always tracks the newest release.
+#
+# Version stamping: the workflow calls `uv version <tag>` before building the
+# Docker image so `import analysis; analysis.__version__` returns the right
+# string inside the container.  Note that this runs *after* the tag is created,
+# so the tagged commit itself still has the previous version in pyproject.toml.
+# If you also want `uv add git+https://github.com/...@v1.2.3` to report the
+# correct version, bump pyproject.toml locally and commit before cutting the
+# release.
+on:
+  release:
+    types: [published]
+
+env:
+  REGISTRY:   ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # bruno-f-cruz/analysis-harlow-learning-sets
+
+jobs:
+  # ── 1. Lint ────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.13"
+
+      - name: Install project (with dev deps)
+        run: uv sync --locked
+
+      - name: Run ruff check
+        run: uv run ruff check .
+
+      - name: Run ruff format --check
+        run: uv run ruff format --check .
+
+  # ── 2. Tests ───────────────────────────────────────────────────────────────
+  tests:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.13"
+
+      - name: Install project (with dev deps)
+        run: uv sync --locked
+
+      - name: Run pytest
+        run: uv run pytest tests/ -v
+
+  # ── 3. Build & push Docker image ──────────────────────────────────────────
+  build-and-push:
+    name: Build Docker image and push to GHCR
+    runs-on: ubuntu-latest
+    needs: [lint, tests]   # only runs when both gates pass
+
+    permissions:
+      contents:     write   # update release description
+      packages:     write   # push to ghcr.io
+      attestations: write   # sign image provenance
+      id-token:     write   # needed for attestation signing
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.13"
+
+      # uv version accepts "v1.2.3" directly — no need to strip the leading "v".
+      - name: Stamp package version from release tag
+        run: uv version "${{ github.ref_name }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derives tags and OCI labels from the release event:
+      #   ghcr.io/.../analysis-harlow-learning-sets:v1.2.3
+      #   ghcr.io/.../analysis-harlow-learning-sets:1.2.3
+      #   ghcr.io/.../analysis-harlow-learning-sets:latest
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags:   ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache stored in the registry — fast rebuilds, no extra infra.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to:   type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name:     ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest:   ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      # Append pull instructions to the release body so the image is
+      # discoverable directly from the release page.
+      - name: Append Docker pull command to release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG:      ${{ github.ref_name }}
+          DIGEST:   ${{ steps.push.outputs.digest }}
+          REPO:     ${{ env.IMAGE_NAME }}
+          REGISTRY: ${{ env.REGISTRY }}
+        run: |
+          CURRENT_BODY="$(gh release view "$TAG" --json body --jq '.body')"
+          PULL_CMD="docker pull ${REGISTRY}/${REPO}:${TAG}"
+          DIGEST_CMD="docker pull ${REGISTRY}/${REPO}@${DIGEST}"
+          ADDITION="
+
+          ---
+          ## 🐳 Docker image
+
+          Pull by tag (mutable — always the latest patch for this release):
+          \`\`\`bash
+          ${PULL_CMD}
+          \`\`\`
+
+          Pull by digest (immutable — byte-for-byte reproducible):
+          \`\`\`bash
+          ${DIGEST_CMD}
+          \`\`\`
+
+          Image: \`${REGISTRY}/${REPO}\`
+          Digest: \`${DIGEST}\`"
+
+          gh release edit "$TAG" --notes "${CURRENT_BODY}${ADDITION}"
