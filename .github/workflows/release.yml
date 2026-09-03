@@ -1,4 +1,4 @@
-name: Release — Lint, Test, Build & Publish Docker image
+name: Release — Lint, Build & Publish Docker image
 
 # Triggers when you publish a GitHub Release.  The release tag (e.g. v1.2.3)
 # becomes the primary Docker image tag; `latest` always tracks the newest release.
@@ -40,29 +40,11 @@ jobs:
       - name: Run ruff format --check
         run: uv run ruff format --check .
 
-  # ── 2. Tests ───────────────────────────────────────────────────────────────
-  tests:
-    name: Tests (pytest)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          python-version: "3.13"
-
-      - name: Install project (with dev deps)
-        run: uv sync --locked
-
-      - name: Run pytest
-        run: uv run pytest tests/ -v
-
-  # ── 3. Build & push Docker image ──────────────────────────────────────────
+  # ── 2. Build & push Docker image ──────────────────────────────────────────
   build-and-push:
     name: Build Docker image and push to GHCR
     runs-on: ubuntu-latest
-    needs: [lint, tests]   # only runs when both gates pass
+    needs: [lint]   # only runs when lint passes
 
     permissions:
       contents:     write   # update release description

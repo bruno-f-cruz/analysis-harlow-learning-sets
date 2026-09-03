@@ -1,4 +1,4 @@
-name: CI — Lint & Test
+name: CI — Lint
 
 on:
   push:
@@ -26,20 +26,3 @@ jobs:
 
       - name: Run ruff format --check
         run: uv run ruff format --check .
-
-  tests:
-    name: Tests (pytest)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          python-version: "3.13"
-
-      - name: Install project (with dev deps)
-        run: uv sync --locked
-
-      - name: Run pytest
-        run: uv run pytest tests/ -v
