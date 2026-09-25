@@ -21,12 +21,14 @@ def imports_pathlib():
 @app.cell
 def load_data(Path):
     from analysis.features import prepare_trials
-    from analysis.sessions import load_attached_datasets, load_processed_table
+    from analysis.sessions import Dataset
 
-    attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
-    location = attached[0]["location"]
-    df = load_processed_table(location, "session")
-    trials = load_processed_table(location, "sites")
+    _root = Path(__file__).parent.parent
+    # Raises if any selected session is missing from the dataset.
+    dataset = Dataset.from_manifests(
+        _root / "data_assets.json", _root / "raw_sessions.json"
+    )
+    df, trials = dataset.session, dataset.sites
     _trials, trials_all = prepare_trials(trials, df)
     print(
         f"Loaded {trials_all['session_id'].nunique()} sessions, {len(trials_all):,} trials"

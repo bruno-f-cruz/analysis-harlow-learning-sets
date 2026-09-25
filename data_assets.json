@@ -2,9 +2,9 @@
   "version": 1,
   "attached_datasets": [
     {
-      "id": "harlow-experiment-processed",
-      "mount": "processed",
-      "location": "s3://aind-scratch-data/vr-foraging/harlow-experiments/harlow-experiment"
+      "id": "vr-foraging-dataset",
+      "mount": "vr-foraging-dataset",
+      "location": "s3://aind-scratch-data/vr-foraging/vr-foraging-dataset"
     }
   ]
 }

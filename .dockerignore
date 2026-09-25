@@ -6,7 +6,6 @@ __pycache__
 .ruff_cache
 __marimo__
 scratch
-data
 artifacts/runs
 .pytest_cache
 .worktrees
