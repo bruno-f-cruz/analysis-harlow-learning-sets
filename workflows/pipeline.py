@@ -66,13 +66,13 @@ def imports_provenance():
         git_is_dirty,
         host_info,
     )
-    from analysis.sessions import load_attached_datasets, build_inputs_manifest
+    from analysis.sessions import load_attached_datasets, build_inputs
     from datetime import datetime, timezone
     import os
 
     return (
         artifact_store_for_uri,
-        build_inputs_manifest,
+        build_inputs,
         build_manifest,
         datetime,
         generate_run_id,
@@ -128,7 +128,7 @@ def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
 def selection(
     Path,
     artifact_store,
-    build_inputs_manifest,
+    build_inputs,
     load_attached_datasets,
 ):
     from analysis.logger import log as _log
@@ -141,16 +141,9 @@ def selection(
     uri = dataset_uri(_root / "data_assets.json")
     attached = load_attached_datasets(_root / "raw_sessions.json")
     session_ids = [entry["mount"] for entry in attached]
-    artifact_store.write_json(
-        "selection.json",
-        {
-            "data_assets": load_attached_datasets(_root / "data_assets.json"),
-            "raw_sessions": attached,
-        },
-    )
 
-    inputs = build_inputs_manifest([uri])
-    artifact_store.write_json("inputs.json", inputs)
+    # One record of what went in: dataset location, file etags, session ids.
+    artifact_store.write_json("inputs.json", build_inputs(uri, session_ids))
     for _name, _data in fetch_dataset_provenance(uri).items():
         artifact_store.write_bytes(f"dataset/{_name}", _data)
     _log.info("selected %d session(s) from raw_sessions.json", len(session_ids))

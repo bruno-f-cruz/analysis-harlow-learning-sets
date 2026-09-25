@@ -34,36 +34,6 @@ def load_attached_datasets(
     return json.loads(path.read_text()).get("attached_datasets", [])
 
 
-def build_inputs_manifest(
-    locations: List[str], client: Any = None
-) -> List[Dict[str, Any]]:
-    """List every object under each S3 prefix and record its size/etag
-    (spec section 11). Defaults to anonymous/unsigned access, matching the rest
-    of this module -- no AWS credentials are needed to build this manifest.
-
-    ``locations`` are prefixes, not single object keys. Written to
-    ``inputs.json`` before or at the start of processing so a run's exact
-    inputs are pinned even if the underlying objects later change.
-    """
-    client = client or boto3.client("s3", config=Config(signature_version=UNSIGNED))
-    manifest: List[Dict[str, Any]] = []
-    for location in locations:
-        parsed = urlparse(location)
-        bucket, prefix = parsed.netloc, parsed.path.strip("/") + "/"
-        paginator = client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                manifest.append(
-                    {
-                        "uri": f"s3://{bucket}/{obj['Key']}",
-                        "session": prefix.rstrip("/"),
-                        "size": obj["Size"],
-                        "etag": obj["ETag"].strip('"'),
-                    }
-                )
-    return manifest
-
-
 #: Files next to the dataset's tables that record what generated it.
 DATASET_PROVENANCE_FILES = ("data_description.json", "processing.json")
 
@@ -84,6 +54,47 @@ def fetch_dataset_provenance(uri: str, client: Any = None) -> Dict[str, bytes]:
         name: client.get_object(Bucket=bucket, Key=f"{prefix}/{name}")["Body"].read()
         for name in DATASET_PROVENANCE_FILES
     }
+
+
+#: The dataset's tables that :class:`Dataset` reads.
+DATASET_TABLES = ("session", "sites")
+
+
+def build_inputs(
+    uri: str, session_ids: Sequence[str], client: Any = None
+) -> Dict[str, Any]:
+    """Everything that goes into a run, for its ``inputs.json``: the dataset
+    location, the selected session ids, and the size/etag of every dataset
+    file the run reads (:data:`DATASET_TABLES` + :data:`DATASET_PROVENANCE_FILES`).
+
+    The etags pin *which build* of the dataset was read even if it's later
+    rebuilt in place. Anonymous/unsigned, like every read in this module; a
+    missing file raises. Local datasets have no etag, so it's ``None``.
+    """
+    names = [f"{table}.parquet" for table in DATASET_TABLES]
+    names += DATASET_PROVENANCE_FILES
+    if uri.startswith("s3://"):
+        client = client or boto3.client("s3", config=Config(signature_version=UNSIGNED))
+        parsed = urlparse(uri)
+        bucket, prefix = parsed.netloc, parsed.path.strip("/")
+        heads = {
+            name: client.head_object(Bucket=bucket, Key=f"{prefix}/{name}")
+            for name in names
+        }
+        files = [
+            {
+                "name": name,
+                "size": head["ContentLength"],
+                "etag": head["ETag"].strip('"'),
+            }
+            for name, head in heads.items()
+        ]
+    else:
+        files = [
+            {"name": name, "size": (Path(uri) / name).stat().st_size, "etag": None}
+            for name in names
+        ]
+    return {"dataset": uri, "files": files, "session_ids": sorted(session_ids)}
 
 
 def _scan_table(uri: str, table: str) -> pl.LazyFrame:

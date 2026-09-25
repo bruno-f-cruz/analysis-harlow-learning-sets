@@ -21,7 +21,6 @@ _RESERVED_MANIFEST_KEYS = {
     "python_version",
     "config",
     "inputs",
-    "selection",
     "dataset_provenance",
 }
 
@@ -64,8 +63,8 @@ def build_manifest(
 
     Returns a dict with the manifest's fixed/required fields: ``run_id``,
     ``started_at``, ``completed_at``, ``status``, ``git_commit``,
-    ``container_image``, ``python_version``, ``config``, ``inputs``,
-    ``selection``, and ``dataset_provenance``.
+    ``container_image``, ``python_version``, ``config``, ``inputs``, and
+    ``dataset_provenance``.
 
     ``extra``, if given, is merged into the result to add caller-supplied
     fields. Callers must not use ``extra`` to overwrite any of the fixed
@@ -84,7 +83,6 @@ def build_manifest(
         "python_version": python_version,
         "config": "config.yaml",
         "inputs": "inputs.json",
-        "selection": "selection.json",
         "dataset_provenance": "dataset/",
     }
     if extra:

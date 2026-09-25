@@ -13,7 +13,7 @@ services:
       - ARTIFACT_URI=${ARTIFACT_URI:-/artifacts}
       - AWS_REGION=${AWS_REGION:-us-west-2}
       # Reads need no credentials (public buckets). Writes (ARTIFACT_URI to a
-      # private bucket, or --upload) use the host's normal credential chain.
+      # private bucket) use the host's normal credential chain.
       # Uncomment if not using SSO/instance roles:
       # - AWS_ACCESS_KEY_ID
       # - AWS_SECRET_ACCESS_KEY
