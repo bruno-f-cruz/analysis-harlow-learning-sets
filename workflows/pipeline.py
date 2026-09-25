@@ -91,7 +91,6 @@ def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
     import sys
     from pathlib import Path as _Path
     from analysis.logger import log as _log
-    from obstore.store import S3Store
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
     # name `setup` for its own special zero-argument "setup cell" concept, and
@@ -122,37 +121,7 @@ def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
     )
 
     _log.info("run_id=%s  artifacts → %s/runs/%s", run_id, artifact_uri, run_id)
-
-    import json as _json
-
-    _dataset_location = _json.loads(
-        (_Path(__file__).parent.parent / "data_assets.json").read_text()
-    )["attached_datasets"][0]["location"]
-    store = S3Store.from_url(_dataset_location, region="us-west-2", skip_signature=True)
-    return artifact_store, figures_dir, run_id, started_at, store
-
-
-@app.cell
-def session_viewer(mo, store):
-    import io
-    import pandas as _pd
-    import obstore as _obs
-
-    df = _pd.read_parquet(io.BytesIO(bytes(_obs.get(store, "session.parquet").bytes())))
-    mo.ui.table(
-        df,
-        pagination=True,
-        page_size=20,
-        selection=None,
-        hidden_columns=["rig", "task_logic", "session", "trainer_state"],
-    )
-    return (df,)
-
-
-@app.cell
-def _(df):
-    print(df["curriculum_stage_name"].unique())
-    return
+    return artifact_store, figures_dir, run_id, started_at
 
 
 @app.cell
@@ -163,32 +132,61 @@ def selection(
     load_attached_datasets,
 ):
     from analysis.logger import log as _log
+    from analysis.sessions import dataset_uri, fetch_dataset_provenance
 
-    # data_assets.json points at the already-processed dataset (see
-    # scripts/attach_datasets.py and scripts/sync_and_process.py to regenerate it).
-    attached = load_attached_datasets(Path(__file__).parent.parent / "data_assets.json")
-    artifact_store.write_json("selection.json", {"attached_datasets": attached})
+    # data_assets.json says where the shared processed VR-foraging dataset
+    # lives; raw_sessions.json picks which of its sessions this analysis uses
+    # (refresh it via scripts/attach_datasets.py).
+    _root = Path(__file__).parent.parent
+    uri = dataset_uri(_root / "data_assets.json")
+    attached = load_attached_datasets(_root / "raw_sessions.json")
+    session_ids = [entry["mount"] for entry in attached]
+    artifact_store.write_json(
+        "selection.json",
+        {
+            "data_assets": load_attached_datasets(_root / "data_assets.json"),
+            "raw_sessions": attached,
+        },
+    )
 
-    inputs = build_inputs_manifest([entry["location"] for entry in attached])
+    inputs = build_inputs_manifest([uri])
     artifact_store.write_json("inputs.json", inputs)
-    _log.info("resolved %d attached dataset(s) from data_assets.json", len(attached))
-    return (attached,)
+    for _name, _data in fetch_dataset_provenance(uri).items():
+        artifact_store.write_bytes(f"dataset/{_name}", _data)
+    _log.info("selected %d session(s) from raw_sessions.json", len(session_ids))
+    return session_ids, uri
 
 
 @app.cell
-def load_and_prepare_trials(attached, df):
+def session_viewer(mo, session_ids, uri):
+    from analysis.logger import log as _log
+    from analysis.sessions import Dataset
+
+    _log.info("loading %d session(s) from %s…", len(session_ids), uri)
+    # Raises if any selected session is missing from the dataset. Per-animal
+    # tables load on demand, e.g. dataset.load_licks("841312").
+    dataset = Dataset.load(uri, session_ids)
+    df, sites = dataset.session, dataset.sites
+    mo.ui.table(df, pagination=True, page_size=20, selection=None)
+    return dataset, df, sites
+
+
+@app.cell
+def _(df):
+    print(df["curriculum_stage_name"].unique())
+    return
+
+
+@app.cell
+def load_and_prepare_trials(df, sites):
     import pandas as pd
     import numpy as np
     from analysis.features import prepare_trials
     from analysis.logger import log as _log
-    from analysis.sessions import load_processed_table
 
-    _log.info("loading and preparing trials…")
-    # "sites" == trials (one row per site). The analysis doesn't need to know
-    # whether the dataset lives on local disk or S3, signed or unsigned --
-    # that's load_processed_table's job, not the analysis's.
-    trials = load_processed_table(attached[0]["location"], "sites")
-    trials, trials_all = prepare_trials(trials, df, degenerate_margin=0.1, end_frac=0.8)
+    _log.info("preparing trials…")
+    # "sites" == trials (one row per site).
+    trials, trials_all = prepare_trials(sites, df, degenerate_margin=0.1, end_frac=0.8)
 
     SUBJECT_IDS = sorted(trials["subject_id"].unique())
     return SUBJECT_IDS, np, pd, trials, trials_all

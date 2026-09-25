@@ -5,8 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "aind-behavior-vr-foraging-packaging >= 0.0.16",
-    "aind-behavior-vr-foraging[data] >= 1.1",
     "jupyter>=1.1.1",
     "matplotlib>=3.10.7",
     "numpy>=2.3.3",
@@ -15,7 +13,6 @@ dependencies = [
     "ruff",
     "tqdm>=4.67.1",
     "scikit-learn>=1.8.0",
-    "aind-data-access-api>=1.9.2",
     "pyarrow>=24.0.0",
     "marimo[sql]>=0.23.15",
     "duckdb>=1.5.5",
@@ -23,8 +20,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "boto3>=1.35",
     "pyyaml>=6.0",
-    "polars>=1.43.2",  # 1.43.1 is yanked upstream
-    "obstore>=0.11.0",
+    "polars>=1.43.2", # 1.43.1 is yanked upstream
 ]
 
 [dependency-groups]

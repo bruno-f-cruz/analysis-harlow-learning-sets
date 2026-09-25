@@ -7,11 +7,10 @@
 # ///
 """Query the AIND metadata DocDB and refresh raw_sessions.json.
 
-``raw_sessions.json`` pins which raw sessions feed the processed dataset
-(see ``src/analysis/preprocessing.py``) -- it's not what
-``workflows/pipeline.py`` reads (that's ``data_assets.json``, which just
-points at the processed dataset). To regenerate: sync these locations to
-local disk, then run ``uv run python scripts/process_sessions.py --force --upload``.
+``raw_sessions.json`` pins which sessions this analysis uses: the workflows
+load only these ``session_id``s (each entry's ``mount``) out of the shared,
+already-processed dataset ``data_assets.json`` points at, and crash if
+any of them is missing there.
 
 Uses ``version="v2"`` since these sessions are on the newer aind-data-schema
 layout, where the default ``"v1"`` returns nothing and the timestamp field
@@ -53,9 +52,8 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 MANIFEST_PATH = Path(__file__).resolve().parent.parent / "raw_sessions.json"
 _PROJECTION = {"name": 1, "location": 1, "subject.subject_id": 1}
 
-# Hard-coded selection criteria — same animals/cutoff date the notebook's
-# now-dead `sync_raw_data` cell used to declare (see workflows/pipeline.py
-# git history). Edit these directly to change which sessions get attached.
+# Hard-coded selection criteria. Edit these directly to change which sessions
+# get attached.
 SUBJECT_IDS = ["841312", "841299", "866063", "864846", "864845"]
 START_DATE = "2026-06-01"
 

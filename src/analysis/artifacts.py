@@ -26,6 +26,9 @@ class ArtifactStore(ABC):
     def write_text(self, relative_path: str, text: str) -> None: ...
 
     @abstractmethod
+    def write_bytes(self, relative_path: str, data: bytes) -> None: ...
+
+    @abstractmethod
     def write_parquet(self, relative_path: str, df: pd.DataFrame) -> None: ...
 
     @abstractmethod
@@ -66,6 +69,9 @@ class LocalArtifactStore(ArtifactStore):
     def write_text(self, relative_path: str, text: str) -> None:
         self._resolve(relative_path).write_text(text)
 
+    def write_bytes(self, relative_path: str, data: bytes) -> None:
+        self._resolve(relative_path).write_bytes(data)
+
     def write_parquet(self, relative_path: str, df: pd.DataFrame) -> None:
         df.to_parquet(self._resolve(relative_path))
 
@@ -93,6 +99,11 @@ class S3ArtifactStore(ArtifactStore):
     def write_text(self, relative_path: str, text: str) -> None:
         self._client.put_object(
             Bucket=self.bucket, Key=self._key(relative_path), Body=text
+        )
+
+    def write_bytes(self, relative_path: str, data: bytes) -> None:
+        self._client.put_object(
+            Bucket=self.bucket, Key=self._key(relative_path), Body=data
         )
 
     def write_parquet(self, relative_path: str, df: pd.DataFrame) -> None:
