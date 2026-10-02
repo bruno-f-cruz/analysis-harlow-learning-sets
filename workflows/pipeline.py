@@ -186,76 +186,50 @@ def load_and_prepare_trials(df, sites):
 
 
 @app.cell
-def curriculum_stage_datasets(df, mo, trials, trials_all):
-    FULL_STAGES = [
-        "LearningSets",
-        "manual_LearningSets_v1.2.0_2Contrasts_5Rew_5NonRew",
-        "manual_LearningSets_v1.2.0_2Contrasts_8Rew_10NonRew",
-    ]
-    ABREVERSAL_STAGES = ["manual_LearningSets_v1.2.0_ABReversal_odor0v1_5Rew_5NonRew"]
-
-    _full_sessions = df.loc[df["curriculum_stage_name"].isin(FULL_STAGES), "session_id"]
-    _abreversal_sessions = df.loc[
-        df["curriculum_stage_name"].isin(ABREVERSAL_STAGES), "session_id"
-    ]
-
-    trials_full = trials[trials["session_id"].isin(_full_sessions)]
-    trials_abreversal = trials[trials["session_id"].isin(_abreversal_sessions)]
-    trials_all_full = trials_all[trials_all["session_id"].isin(_full_sessions)]
-    trials_all_abreversal = trials_all[
-        trials_all["session_id"].isin(_abreversal_sessions)
-    ]
-
-    print(
-        f"Full: {trials_full['session_id'].nunique()} sessions, "
-        f"{len(trials_full):,} trials"
+def curriculum_stage_datasets(df, mo, trials):
+    from analysis.dataset_selection import (
+        DATASET_OPTIONS,
+        curriculum_stage_session_ids,
+        select_trials_by_session as _select_trials_by_session,
     )
-    print(
-        f"ABReversal: {trials_abreversal['session_id'].nunique()} sessions, "
-        f"{len(trials_abreversal):,} trials"
-    )
+
+    session_ids_by_dataset = curriculum_stage_session_ids(df)
+    for _name, _session_ids in session_ids_by_dataset.items():
+        _trials = _select_trials_by_session(trials, _session_ids)
+        print(
+            f"{_name}: {_trials['session_id'].nunique()} sessions, "
+            f"{len(_trials):,} trials"
+        )
 
     # Everything below this point analyses whichever curriculum stage is picked here.
     # Defaults to `--dataset` on the command line (e.g. `python workflows/pipeline.py
     # --dataset ABReversal`, or `marimo run workflows/pipeline.py -- --dataset ABReversal`);
     # in the interactive editor mo.cli_args() is empty, so it falls back to "Full" and
     # stays switchable via the radio.
-    _DATASET_OPTIONS = ["Full", "ABReversal"]
     _cli_dataset = mo.cli_args().get("dataset", "Full")
-    if _cli_dataset not in _DATASET_OPTIONS:
+    if _cli_dataset not in DATASET_OPTIONS:
         raise ValueError(
-            f"--dataset must be one of {_DATASET_OPTIONS}, got {_cli_dataset!r}"
+            f"--dataset must be one of {DATASET_OPTIONS}, got {_cli_dataset!r}"
         )
 
     dataset_toggle = mo.ui.radio(
-        options=_DATASET_OPTIONS,
+        options=DATASET_OPTIONS,
         value=_cli_dataset,
         label="Curriculum stage dataset (used by all analysis cells below)",
     )
     dataset_toggle
-    return (
-        dataset_toggle,
-        trials_abreversal,
-        trials_all_abreversal,
-        trials_all_full,
-        trials_full,
-    )
+    return dataset_toggle, session_ids_by_dataset
 
 
 @app.cell
-def dataset_selection(
-    dataset_toggle,
-    trials_abreversal,
-    trials_all_abreversal,
-    trials_all_full,
-    trials_full,
-):
-    trials_selected = (
-        trials_full if dataset_toggle.value == "Full" else trials_abreversal
+def dataset_selection(dataset_toggle, session_ids_by_dataset, trials, trials_all):
+    from analysis.dataset_selection import (
+        select_trials_by_session as _select_trials_by_session,
     )
-    trials_all_selected = (
-        trials_all_full if dataset_toggle.value == "Full" else trials_all_abreversal
-    )
+
+    _selected_sessions = session_ids_by_dataset[dataset_toggle.value]
+    trials_selected = _select_trials_by_session(trials, _selected_sessions)
+    trials_all_selected = _select_trials_by_session(trials_all, _selected_sessions)
     SUBJECT_IDS_SELECTED = sorted(trials_selected["subject_id"].unique())
     print(
         f"Analysing '{dataset_toggle.value}': "
@@ -365,6 +339,8 @@ def choice_at_first_stops_across_sessions(
     plt,
     trials_selected,
 ):
+    from analysis.dataset_selection import session_day
+
     # P(choice) at the very first trial of every block, averaged within session, plotted across sessions
     _rs = trials_selected[
         (trials_selected["site_label"] == "RewardSite")
@@ -372,7 +348,7 @@ def choice_at_first_stops_across_sessions(
     ].copy()
     _rs = _rs.sort_values(["session_id", "block", "start_time"])
     _rs["_block_pos"] = _rs.groupby(["session_id", "block"]).cumcount()
-    _rs["session_date"] = _rs["session_id"].str.split("_").str[1]
+    _rs["session_date"] = session_day(_rs["session_id"])
     STOP_STYLES = {
         0: {"label": "1st stop", "color": "tab:blue"},
         1: {"label": "2nd stop", "color": "tab:orange"},
