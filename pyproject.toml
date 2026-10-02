@@ -21,15 +21,23 @@ dependencies = [
     "boto3>=1.35",
     "pyyaml>=6.0",
     "polars>=1.43.2", # 1.43.1 is yanked upstream
+    "harlow-rl",
 ]
 
 [dependency-groups]
 dev = [
     "debugpy>=1.8",
+    "pytest>=8",
 ]
 
 [tool.uv]
 package = true
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+harlow-rl = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

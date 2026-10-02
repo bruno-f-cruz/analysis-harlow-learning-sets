@@ -1,0 +1,13 @@
+[project]
+name = "harlow-rl"
+version = "0.1.0"
+description = "Minimal stay/leave Harlow learning-set environment and tabular RL agents"
+requires-python = ">=3.13"
+dependencies = ["numpy>=2.3.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harlow_rl"]

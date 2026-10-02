@@ -13,8 +13,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from analysis.features import block_window_index, expand_to_block_windows
-from analysis.plotting import TWO_BY_TWO_COLORS, bootstrap_mean_ci
+from analysis.features import block_window_index, blocks_first_last_tags, expand_to_block_windows
+from analysis.plotting import (
+    TWO_BY_TWO_COLORS,
+    bootstrap_diff_ci,
+    bootstrap_group_stats,
+    bootstrap_mean_ci,
+    ci_errorbar,
+    plot_mean_ci_band,
+)
+from analysis.plotting_style import INK_MUTED, INK_PRIMARY, animal_palette, diverging_cmap
 
 #: (first_stop_rewarded, next_odor_is_rewarded, short_label, ideal_p_stop)
 COUNTERFACTUAL_CELLS = [
@@ -124,6 +132,125 @@ def counterfactual_block_table(trials: pd.DataFrame) -> pd.DataFrame:
     for col in ("stop_next_good", "stop_next_bad"):
         out[col] = out[col].astype("boolean")
     return out
+
+
+def plot_counterfactual_p_stop_by_window(
+    trials: pd.DataFrame,
+    first_stop_rewarded: bool,
+    window_blocks: int = 30,
+    skip_blocks: int | None = None,
+    subtract_chance: bool = False,
+    ax=None,
+    animal_colors: dict | None = None,
+    reward_colors: dict | None = None,
+):
+    """P(Stop) at the next occurrence of the *other* odor type after a
+    block's first stop (:func:`counterfactual_block_table`'s
+    ``stop_next_good``/``stop_next_bad``), aggregated into `window_blocks`-block
+    windows (:func:`analysis.features.block_window_index`). ``skip_blocks``
+    (default: ``window_blocks``, i.e. non-overlapping) is the stride between
+    window starts; pass e.g. ``skip_blocks=15`` with ``window_blocks=30`` for
+    50%-overlapping windows.
+
+    Windows are computed over each animal's *entire* block stream, not
+    restricted to blocks matching `first_stop_rewarded` -- so window
+    boundaries stay calendar-aligned across animals and across this
+    function's two mirror-image calls; the condition is applied only when
+    aggregating each window's P(Stop). The x-axis is the literal cumulative
+    block count at each window's end (``window_blocks``, ``window_blocks +
+    skip_blocks``, ``window_blocks + 2 * skip_blocks``, ...) -- overlapping
+    windows just make consecutive points share more of their blocks.
+
+    ``first_stop_rewarded=False`` plots ``stop_next_good``: after a
+    *non-rewarded* first stop, does the animal now stop for the rewarded
+    odor the next time it appears (ideally rises with training).
+    ``first_stop_rewarded=True`` plots ``stop_next_bad``: after a *rewarded*
+    first stop, does the animal still stop for the non-rewarded odor the
+    next time it appears (ideally falls with training). Blocks where that
+    odor never recurred before the block ended contribute no data point
+    (``stop_next_good``/``stop_next_bad`` is ``<NA>`` there, dropped).
+
+    ``subtract_chance=True`` subtracts, per animal per window,
+    :func:`first_site_chance_by_window`'s ``stopped_first_site`` -- P(Stop)
+    at the block's very first RewardSite, i.e. before the animal has any
+    evidence about that block's odor mapping, the same "no information"
+    chance level `pipeline.py` overlays on the counterfactual cohort plots.
+    The y-axis becomes a signed P(Stop) - chance difference (no longer
+    bounded to ``[0, 1]``) with a dashed zero line marking "no better than
+    chance"; the plotted mean/CI is bootstrapped on the already-subtracted
+    per-animal-per-window values, not on the two probabilities separately.
+
+    Individual animals are drawn as thin, semi-transparent lines (colored by
+    :func:`analysis.plotting_style.animal_palette`, override via
+    `animal_colors`); the bold line + shaded band is the cohort mean and
+    bootstrapped 95% CI across animals (:func:`analysis.plotting.bootstrap_group_stats`,
+    since the input is already one row per animal per window -- see
+    AGENTS.md), colored by `reward_colors` (default ``{True: "tab:orange",
+    False: "tab:blue"}``, same convention as :func:`analysis.plotting.plot_choice_by_odor_appearance`)
+    according to which odor is actually being tracked -- the rewarded one
+    when `first_stop_rewarded` is False, the non-rewarded one when True.
+    """
+    from matplotlib.ticker import MaxNLocator
+
+    skip_blocks = window_blocks if skip_blocks is None else skip_blocks
+
+    block_table = counterfactual_block_table(trials)
+    windows = block_window_index(trials, window_blocks=window_blocks, skip_blocks=skip_blocks)
+    block_table = block_table.merge(
+        windows[["subject_id", "session_id", "block", "window"]],
+        on=["subject_id", "session_id", "block"],
+        how="inner",  # drop the trailing partial window's blocks; duplicates
+        # a block onto every overlapping window it belongs to
+    )
+
+    value_col = "stop_next_bad" if first_stop_rewarded else "stop_next_good"
+    cond = block_table[block_table["first_stop_rewarded"] == first_stop_rewarded]
+    cond = cond.dropna(subset=[value_col])
+
+    per_animal = (
+        cond.groupby(["subject_id", "window"])[value_col]
+        .mean()
+        .reset_index()
+        .rename(columns={value_col: "p_stop"})
+    )
+
+    if subtract_chance:
+        chance = first_site_chance_by_window(trials, window_blocks, skip_blocks)
+        per_animal = per_animal.merge(chance, on=["subject_id", "window"], how="left")
+        per_animal["p_stop"] = per_animal["p_stop"] - per_animal["stopped_first_site"]
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 5))
+
+    subjects = sorted(per_animal["subject_id"].unique())
+    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    reward_colors = (
+        reward_colors if reward_colors is not None else {True: "tab:orange", False: "tab:blue"}
+    )
+    tracked_odor_is_rewarded = not first_stop_rewarded
+
+    for subject_id, grp in per_animal.groupby("subject_id"):
+        grp = grp.sort_values("window")
+        x = grp["window"].to_numpy() * skip_blocks + window_blocks
+        ax.plot(
+            x, grp["p_stop"], color=animal_colors[str(subject_id)], linewidth=1, alpha=0.5
+        )
+
+    rng = np.random.default_rng(0)
+    stats = bootstrap_group_stats(per_animal["p_stop"], per_animal["window"], rng)
+    stats.index = stats.index * skip_blocks + window_blocks
+    plot_mean_ci_band(ax, stats, color=reward_colors[tracked_odor_is_rewarded], marker="o")
+
+    ax.set_xlabel("Block number")
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=8, steps=[1, 3, 6, 9, 10], integer=True))
+    if subtract_chance:
+        ax.axhline(0, color="gray", ls=":", lw=1)
+        ax.set_ylabel("P(Stop) − chance (P(Stop) @ site 1)")
+    else:
+        ax.set_ylabel("P(Stop)")
+        ax.set_ylim(-0.1, 1.1)
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    return ax
 
 
 def counterfactual_session_matrix(
@@ -330,6 +457,123 @@ def plot_counterfactual_heatmap(
         fontsize=11,
     )
     return fig, matrix
+
+
+def plot_counterfactual_heatmap_by_window(
+    trials: pd.DataFrame,
+    window_blocks: int = 50,
+    skip_blocks: int | None = None,
+    min_blocks: int = 3,
+    annotate: bool = True,
+    subtract_chance: bool = True,
+):
+    """Row x 4-condition heatmap of P(Stop), one panel per animal.
+
+    A presentation-styled ("pretty") counterpart of
+    :func:`plot_counterfactual_heatmap` (which `pipeline.py` uses with raw
+    ``p_stop``/``p_leave``/``accuracy``): rows are non-overlapping
+    `window_blocks`-block chunks (`skip_blocks` defaults to `window_blocks`,
+    i.e. non-overlapping -- pass a smaller value for overlapping windows)
+    instead of raw sessions.
+
+    ``subtract_chance=True`` (default) plots P(Stop) minus that (subject,
+    window)'s chance level (:func:`first_site_chance_by_window`'s P(Stop) at
+    the block's very first site) instead of the raw probability -- so a
+    cell reads "how much better/worse than no-information guessing", not an
+    absolute rate, and 0 (at chance) sits at the diverging colormap's
+    neutral midpoint (:func:`analysis.plotting_style.diverging_cmap`, the
+    dark-surface-validated diverging map -- never a hue at the midpoint),
+    symmetric around 0 at the largest |value| seen anywhere in the matrix.
+    ``subtract_chance=False`` plots the raw P(Stop) instead (0-1, "coolwarm"
+    -- same colormap `pipeline.py` uses for its own raw ``p_stop`` heatmap).
+    Color scale is shared across all animals' panels either way.
+
+    Meant to be called inside :func:`analysis.plotting_style.presentation_style`,
+    matching every other plot in this notebook -- unlike
+    :func:`plot_counterfactual_heatmap`, it doesn't set its own light-background
+    styling, colorbar, or figure title (presentation figures don't get one;
+    the slide/caption carries that context).
+    """
+    skip_blocks = window_blocks if skip_blocks is None else skip_blocks
+
+    matrix = counterfactual_window_matrix(
+        trials, window_blocks, skip_blocks, min_blocks=min_blocks
+    )
+
+    if subtract_chance:
+        chance = first_site_chance_by_window(trials, window_blocks, skip_blocks)
+        matrix = matrix.merge(chance, on=["subject_id", "window"], how="left")
+        matrix["value"] = matrix["p_stop"] - matrix["stopped_first_site"]
+        cmap = diverging_cmap()
+        vlim = np.nanmax(np.abs(matrix["value"].to_numpy(dtype=float)))
+        vmin, vmax = (-vlim, vlim) if np.isfinite(vlim) and vlim > 0 else (-1.0, 1.0)
+        cell_fmt = "{:+.2f}\nn{}"
+    else:
+        matrix["value"] = matrix["p_stop"]
+        cmap = "coolwarm"
+        vmin, vmax = 0.0, 1.0
+        cell_fmt = "{:.2f}\nn{}"
+
+    subjects = sorted(matrix["subject_id"].unique())
+    max_rows = max(
+        matrix[matrix["subject_id"] == s]["session_id"].nunique() for s in subjects
+    )
+
+    fig, axes = plt.subplots(
+        1,
+        len(subjects),
+        figsize=(3.2 * len(subjects), 0.42 * max_rows + 3.2),
+        squeeze=False,
+        layout="constrained",
+    )
+    for ax, subject in zip(axes[0], subjects):
+        grid, sessions, counts = _pivot(matrix, subject, "value")
+        bounds = (
+            matrix[matrix["subject_id"] == subject]
+            .drop_duplicates("session_id")
+            .set_index("session_id")
+        )
+        row_labels = [
+            f"{int(bounds.loc[s, 'window_start']) + 1}-{int(bounds.loc[s, 'window_end']) + 1}"
+            for s in sessions
+        ]
+
+        ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax, aspect="auto", interpolation="nearest")
+        ax.grid(False)
+        ax.set_xticks(range(len(COUNTERFACTUAL_CELLS)))
+        ax.set_xticklabels(
+            [label for _, _, label, _ in COUNTERFACTUAL_CELLS],
+            rotation=45,
+            ha="right",
+            fontsize=7,
+        )
+        ax.set_yticks(range(len(sessions)))
+        ax.set_yticklabels(row_labels, fontsize=6)
+        ax.set_ylim(max_rows - 0.5, -0.5)
+        ax.axvline(1.5, color=INK_PRIMARY, lw=2.5)
+        ax.set_title(f"Subject {subject}", fontsize=10)
+
+        if annotate:
+            for r in range(grid.shape[0]):
+                for c in range(grid.shape[1]):
+                    v = grid[r, c]
+                    if np.isnan(v):
+                        ax.text(
+                            c, r, "·", ha="center", va="center", color=INK_MUTED, fontsize=8
+                        )
+                        continue
+                    ax.text(
+                        c,
+                        r,
+                        cell_fmt.format(v, counts[r, c]),
+                        ha="center",
+                        va="center",
+                        fontsize=4.5,
+                        color=INK_PRIMARY,
+                    )
+
+    axes[0][0].set_ylabel(f"Block window ({window_blocks} blocks)")
+    return fig, axes[0]
 
 
 def counterfactual_cohort_average(
@@ -543,6 +787,98 @@ def plot_counterfactual_cohort_average(
     return fig, cohort, ax_ln
 
 
+def plot_counterfactual_cohort_minus_chance(
+    trials: pd.DataFrame,
+    window_blocks: int = 100,
+    skip_blocks: int = 20,
+    min_blocks: int = 3,
+    min_animals: int = 2,
+    exclude_subjects=(),
+    subtract_chance: bool = True,
+    ax=None,
+):
+    """Chance-normalized cohort timecourses of the four counterfactual
+    conditions (the line panel of `pipeline.py`'s cohort figure): mean +/-
+    bootstrapped 95% CI across animals per block window, in the pipeline's
+    condition colors (:data:`COUNTERFACTUAL_COLORS`).
+
+    Values are P(stop) at the next site minus each animal's chance level in
+    that window (:func:`first_site_chance_by_window`), subtracted per animal
+    per window before the cohort bootstrap, so 0 = "no better than
+    no-information guessing". Windows with fewer than `min_animals` animals
+    (default 2, the minimum a CI needs) are not drawn, and the x axis stops
+    at the last window that is. The x axis is the block count at each
+    window's end; the number of contributing animals is annotated only where
+    it changes (max over the four conditions), as small ``n=`` labels along
+    the top with a faint guide line, rather than at every window.
+
+    `exclude_subjects` drops those animals from `trials` up front.
+    ``subtract_chance=False`` plots the raw P(Stop) instead (probability
+    axis, no chance subtraction). Call
+    inside :func:`analysis.plotting_style.presentation_style`; no title.
+    Returns ``(ax, cohort)``.
+    """
+    from matplotlib.ticker import MaxNLocator
+
+    if len(exclude_subjects):
+        drop = {str(s) for s in exclude_subjects}
+        trials = trials[~trials["subject_id"].astype(str).isin(drop)]
+
+    matrix = counterfactual_window_matrix(
+        trials, window_blocks, skip_blocks, min_blocks=min_blocks
+    )
+    chance = first_site_chance_by_window(trials, window_blocks, skip_blocks)
+    matrix = matrix.merge(chance, on=["subject_id", "window"], how="left")
+    matrix["p_stop_minus_chance"] = matrix["p_stop"] - matrix["stopped_first_site"]
+    value = "p_stop_minus_chance" if subtract_chance else "p_stop"
+
+    cohort = counterfactual_cohort_average(
+        matrix, value=value, min_animals=min_animals
+    )
+    cohort = cohort.dropna(subset=["mean"])
+    cohort["x"] = cohort["session_index"] * skip_blocks + window_blocks
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+    for (fsr, nr), (_, _, label, _), color in zip(
+        COUNTERFACTUAL_CELL_KEYS, COUNTERFACTUAL_CELLS, COUNTERFACTUAL_COLORS
+    ):
+        sub = cohort[
+            (cohort["first_stop_rewarded"] == fsr) & (cohort["next_rewarded"] == nr)
+        ].sort_values("x")
+        yerr = np.vstack(
+            [
+                (sub["mean"] - sub["ci_lo"]).clip(lower=0).fillna(0),
+                (sub["ci_hi"] - sub["mean"]).clip(lower=0).fillna(0),
+            ]
+        )
+        ax.errorbar(
+            sub["x"], sub["mean"], yerr=yerr, marker="o", ms=5, lw=1.8,
+            capsize=3, color=color, label=label.replace("\n", " "),
+        )
+
+    if subtract_chance:
+        ax.axhline(0, color="gray", ls=":", lw=1)
+    else:
+        ax.set_ylim(-0.1, 1.1)
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    ax.set_xlim(window_blocks - skip_blocks, cohort["x"].max() + skip_blocks)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+    n_by_x = cohort.groupby("x")["n_animals"].max().sort_index()
+    prev = None
+    for x, n in n_by_x.items():
+        if n != prev:
+            ax.axvline(x, color="gray", lw=0.6, ls=":", alpha=0.6, zorder=0)
+            ax.text(x, 1.01, f"n={int(n)}", transform=ax.get_xaxis_transform(),
+                    ha="left", va="bottom", fontsize=8, color=INK_MUTED)
+            prev = n
+    ax.set_xlabel("Number of blocks")
+    ax.set_ylabel("P(Stop) − chance" if subtract_chance else "P(Stop)")
+    ax.legend(frameon=False, fontsize=8, loc="best", ncol=2)
+    return ax, cohort
+
+
 def plot_counterfactual_cohort_by_condition(
     matrix: pd.DataFrame,
     value: str = "p_leave",
@@ -724,3 +1060,265 @@ def first_site_chance_by_window(
         .mean()
         .reset_index()
     )
+
+
+def p_stop_hazard_by_session(trials: pd.DataFrame, position: int) -> pd.DataFrame:
+    """P(stop at raw within-block site `position` | the animal hasn't already
+    stopped earlier in this block), per animal per session.
+
+    `position` is 0-based and pools both odor types (like
+    :func:`first_site_chance_by_window`'s ``_block_pos``, not
+    :func:`analysis.features.appearance_table`'s per-odor ``appearance``).
+    A block only contributes at `position` if it reached that many
+    RewardSite trials *and* the animal had not yet stopped at an earlier one
+    -- blocks that already stopped are excluded rather than counted as a
+    miss, and blocks that never stop are still "at risk" at every position
+    they reach. At ``position=0`` nothing could have happened yet, so every
+    block is at risk and this is just plain P(stop) at the block's first
+    site; at later positions it's the discrete hazard rate.
+
+    Returns one row per (subject_id, session_id) with a 0-based
+    ``session_index`` (that animal's own chronological session rank, same
+    convention as :func:`counterfactual_session_matrix`) and a ``p_stop`` mean.
+    """
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()].copy()
+    rs = rs.sort_values(["session_id", "block", "start_time"])
+    rs["_block_pos"] = rs.groupby(["session_id", "block"]).cumcount()
+
+    first_stop_pos = (
+        rs[rs["has_choice"]].groupby(["session_id", "block"])["_block_pos"].min()
+    )
+    target = rs[rs["_block_pos"] == position].join(
+        first_stop_pos.rename("_first_stop_pos"), on=["session_id", "block"]
+    )
+    at_risk = target["_first_stop_pos"].isna() | (target["_first_stop_pos"] >= position)
+    target = target[at_risk]
+
+    per_session = (
+        target.groupby(["subject_id", "session_id"])["has_choice"]
+        .mean()
+        .reset_index()
+        .rename(columns={"has_choice": "p_stop"})
+    )
+    per_session = per_session.sort_values(["subject_id", "session_id"])
+    per_session["session_index"] = per_session.groupby("subject_id")[
+        "session_id"
+    ].transform(lambda s: s.rank(method="dense").astype(int) - 1)
+    return per_session
+
+
+def plot_p_stop_hazard_by_session(
+    trials: pd.DataFrame,
+    position: int,
+    ax=None,
+    animal_colors: dict | None = None,
+    color: str = "white",
+):
+    """:func:`p_stop_hazard_by_session` plotted across sessions: thin,
+    semi-transparent per-animal lines (colored by
+    :func:`analysis.plotting_style.animal_palette`, override via
+    `animal_colors`) plus the bold `color` line + shaded band for the
+    cohort mean and bootstrapped 95% CI across animals
+    (:func:`analysis.plotting.bootstrap_group_stats`, since the input is
+    already one row per animal per session -- see AGENTS.md).
+
+    The x-axis is each animal's own 0-based chronological session number
+    (``session_index`` + 1), not a calendar date, so animals that started
+    training on different days still line up on "days of training".
+    """
+    from matplotlib.ticker import MaxNLocator
+
+    per_session = p_stop_hazard_by_session(trials, position)
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 5))
+
+    subjects = sorted(per_session["subject_id"].unique())
+    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+
+    for subject_id, grp in per_session.groupby("subject_id"):
+        grp = grp.sort_values("session_index")
+        ax.plot(
+            grp["session_index"] + 1,
+            grp["p_stop"],
+            color=animal_colors[str(subject_id)],
+            linewidth=1,
+            alpha=0.5,
+        )
+
+    rng = np.random.default_rng(0)
+    stats = bootstrap_group_stats(per_session["p_stop"], per_session["session_index"], rng)
+    stats.index = stats.index + 1
+    plot_mean_ci_band(ax, stats, color=color, marker="o")
+
+    ax.set_xlabel("Session number")
+    ax.set_ylabel("P(Stop)" if position == 0 else "P(Stop | hasn't stopped yet)")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_ylim(-0.1, 1.1)
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    return ax
+
+
+def counterfactual_p_stop_first_last_blocks(
+    trials: pd.DataFrame,
+    first_stop_rewarded: bool,
+    n_blocks: int = 30,
+    last_n_blocks: int | None = None,
+    rng=None,
+) -> pd.DataFrame:
+    """Chance-subtracted P(Stop) (see :func:`plot_counterfactual_p_stop_by_window`'s
+    ``subtract_chance``) for each animal's first `n_blocks` vs last
+    `last_n_blocks` (default: same as `n_blocks`) blocks
+    (:func:`analysis.features.blocks_first_last_tags`), computed over the
+    animal's *entire* block stream -- not restricted to blocks matching
+    `first_stop_rewarded` -- so "first"/"last" means the same span of
+    training regardless of which condition is requested.
+
+    Returns one row per (subject_id, block_range) with ``p_stop_minus_chance``
+    and its within-animal bootstrapped 95% CI (``ci_lo``, ``ci_hi``) --
+    :func:`analysis.plotting.bootstrap_diff_ci` on that (subject_id,
+    block_range)'s block-level P(Stop) outcomes
+    (``stop_next_good``/``stop_next_bad``) versus its block-level chance
+    outcomes (``stopped_first_site``). The two are independent, not paired
+    samples -- they use different, only partially-overlapping sets of
+    blocks (the P(Stop) blocks are also restricted to `first_stop_rewarded`
+    and to blocks where the tracked odor recurred) -- so the CI is bootstrapped
+    as a difference of two independent means, not a paired difference.
+
+    Feeds :func:`plot_counterfactual_p_stop_first_last_scatter`.
+    """
+    value_col = "stop_next_bad" if first_stop_rewarded else "stop_next_good"
+    rng = rng if rng is not None else np.random.default_rng(0)
+
+    ranges = blocks_first_last_tags(trials, n_blocks=n_blocks, last_n_blocks=last_n_blocks)[
+        ["subject_id", "session_id", "block", "block_range"]
+    ].drop_duplicates()
+
+    block_table = counterfactual_block_table(trials)
+    block_table = block_table.merge(
+        ranges, on=["subject_id", "session_id", "block"], how="inner"
+    )
+    cond = block_table[block_table["first_stop_rewarded"] == first_stop_rewarded]
+    cond = cond.dropna(subset=[value_col])
+
+    rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
+    rs = rs.sort_values(["session_id", "block", "start_time"])
+    rs = rs.assign(_block_pos=rs.groupby(["session_id", "block"]).cumcount())
+    first_site = rs[rs["_block_pos"] == 0][
+        ["subject_id", "session_id", "block", "has_choice"]
+    ].rename(columns={"has_choice": "stopped_first_site"})
+    first_site = first_site.merge(
+        ranges, on=["subject_id", "session_id", "block"], how="inner"
+    )
+
+    p_stop_groups = cond.groupby(["subject_id", "block_range"])[value_col]
+    chance_groups = first_site.groupby(["subject_id", "block_range"])["stopped_first_site"]
+    keys = sorted(set(p_stop_groups.groups) & set(chance_groups.groups))
+
+    records = []
+    for subject_id, block_range in keys:
+        a = p_stop_groups.get_group((subject_id, block_range)).to_numpy(dtype=float)
+        b = chance_groups.get_group((subject_id, block_range)).to_numpy(dtype=float)
+        mean_diff, ci_lo, ci_hi = bootstrap_diff_ci(a, b, rng)
+        records.append(
+            {
+                "subject_id": subject_id,
+                "block_range": block_range,
+                "p_stop_minus_chance": mean_diff,
+                "ci_lo": ci_lo,
+                "ci_hi": ci_hi,
+            }
+        )
+    return pd.DataFrame.from_records(records)
+
+
+def plot_counterfactual_p_stop_first_last_scatter(
+    trials: pd.DataFrame,
+    n_blocks: int = 30,
+    last_n_blocks: int | None = None,
+    ax=None,
+    reward_colors: dict | None = None,
+    animal_colors: dict | None = None,
+):
+    """Paired first-`n_blocks`-vs-last-`last_n_blocks`-blocks scatter of the
+    chance-subtracted P(Stop) values (:func:`counterfactual_p_stop_first_last_blocks`),
+    one point per animal, both mirror-image conditions overlaid on the same
+    axes. Fill color encodes the condition (`reward_colors`, same convention
+    as :func:`plot_counterfactual_p_stop_by_window` -- orange: after a
+    non-rewarded first stop, does the animal now stop for the rewarded odor;
+    blue: after a rewarded first stop, does it still stop for the
+    non-rewarded odor); the outer ring encodes animal identity
+    (:func:`analysis.plotting_style.animal_palette`, override via
+    `animal_colors`).
+
+    `last_n_blocks` defaults to `n_blocks` (a symmetric first-vs-last
+    comparison); pass a different value (e.g. ``n_blocks=30,
+    last_n_blocks=100``) for an asymmetric one.
+
+    A gray dashed y = x line marks "no change from first to last blocks";
+    points above it improved. Dotted lines at x = 0 / y = 0 mark chance.
+    Axes are equal and shared so the diagonal is a true 45 degrees. Each
+    point also gets bootstrapped 95% CI error bars in both directions (x
+    from the "first" blocks' CI, y from the "last" blocks' CI --
+    :func:`counterfactual_p_stop_first_last_blocks`), colored to match that
+    point's fill.
+    """
+    reward_colors = reward_colors if reward_colors is not None else {True: "tab:orange", False: "tab:blue"}
+    last_n_blocks = n_blocks if last_n_blocks is None else last_n_blocks
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(5, 5))
+
+    for first_stop_rewarded in [False, True]:
+        data = counterfactual_p_stop_first_last_blocks(
+            trials, first_stop_rewarded, n_blocks=n_blocks, last_n_blocks=last_n_blocks
+        )
+        wide = data.pivot(
+            index="subject_id",
+            columns="block_range",
+            values=["p_stop_minus_chance", "ci_lo", "ci_hi"],
+        ).dropna()
+
+        first_stats = wide.xs("first", axis=1, level=1).rename(
+            columns={"p_stop_minus_chance": "mean"}
+        )
+        last_stats = wide.xs("last", axis=1, level=1).rename(
+            columns={"p_stop_minus_chance": "mean"}
+        )
+        x, y = first_stats["mean"], last_stats["mean"]
+        color = reward_colors[not first_stop_rewarded]
+
+        ax.errorbar(
+            x, y,
+            xerr=ci_errorbar(first_stats), yerr=ci_errorbar(last_stats),
+            fmt="none", ecolor=color, elinewidth=1.2, capsize=3, alpha=0.7, zorder=2,
+        )
+
+        subjects = x.index.tolist()
+        subject_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+        edge_colors = [subject_colors[str(s)] for s in subjects]
+        ax.scatter(
+            x, y,
+            color=color,
+            edgecolors=edge_colors,
+            linewidths=1.8,
+            s=70,
+            zorder=3,
+        )
+
+    # bounds from the actual drawn extent (points + error bars), not just
+    # the point values, so error bars never get clipped at the axis edge
+    ax.relim()
+    ax.autoscale_view()
+    (x0, x1), (y0, y1) = ax.get_xlim(), ax.get_ylim()
+    lo = min(x0, y0, 0.0) - 0.05
+    hi = max(x1, y1, 0.0) + 0.05
+    ax.plot([lo, hi], [lo, hi], color="gray", ls="--", lw=1, zorder=1)
+    ax.axhline(0, color="gray", ls=":", lw=0.8, zorder=0)
+    ax.axvline(0, color="gray", ls=":", lw=0.8, zorder=0)
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"First {n_blocks} blocks\n(P(Stop) − chance)")
+    ax.set_ylabel(f"Last {last_n_blocks} blocks\n(P(Stop) − chance)")
+    return ax
