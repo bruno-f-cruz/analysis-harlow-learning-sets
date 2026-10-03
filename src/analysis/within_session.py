@@ -8,9 +8,9 @@ where the animal stops at everything late in a session (e.g. satiation) is
 exactly the kind of decay this is looking for, not noise to discard.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from analysis.plotting import bootstrap_group_stats
 

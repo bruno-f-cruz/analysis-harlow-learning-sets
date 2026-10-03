@@ -89,9 +89,7 @@ def assign_odor_blocks(trials: pd.DataFrame, max_block_size: int = 18) -> pd.Dat
             active[odor_index] = is_rewarded
             pos += 1
         # drop the trailing block (session ends mid-block; see assign_blocks)
-        block_ids = [
-            bid if bid != block_id else np.nan for bid in block_ids
-        ]
+        block_ids = [bid if bid != block_id else np.nan for bid in block_ids]
         odor_block.loc[ordered.index] = pd.array(block_ids, dtype="Int64")
         site_in_odor_block.loc[ordered.index] = pd.array(positions, dtype="Int64")
 
@@ -252,9 +250,7 @@ def appearance_table(
         block_col = "block"
     else:
         rs = assign_odor_blocks(trials)
-        rs = rs[
-            (rs["site_label"] == "RewardSite") & rs["odor_block"].notna()
-        ].copy()
+        rs = rs[(rs["site_label"] == "RewardSite") & rs["odor_block"].notna()].copy()
         block_col = "odor_block"
 
     rs = rs.sort_values(["session_id", block_col, "start_time"])
@@ -319,7 +315,9 @@ def label_first_stop(trials: pd.DataFrame) -> pd.DataFrame:
 # in the notebook, which is why this lives here rather than inline in either.
 
 
-def pooled_block_ordinal(trials: pd.DataFrame, block_col: str = "block") -> pd.DataFrame:
+def pooled_block_ordinal(
+    trials: pd.DataFrame, block_col: str = "block"
+) -> pd.DataFrame:
     """Chronological 0-based block number per animal, pooled across sessions.
 
     Only blocks actually present in ``trials`` are ranked, so a frame that has
@@ -363,7 +361,10 @@ def block_tercile_tags(trials: pd.DataFrame, block_col: str = "block") -> pd.Dat
     n_blocks = ordinals.groupby("subject_id")["block_ordinal"].transform("max") + 1
     frac = (ordinals["block_ordinal"] + 0.5) / n_blocks
     ordinals["block_tercile"] = pd.cut(
-        frac, bins=[0, 1 / 3, 2 / 3, 1], labels=["first", "mid", "last"], include_lowest=True
+        frac,
+        bins=[0, 1 / 3, 2 / 3, 1],
+        labels=["first", "mid", "last"],
+        include_lowest=True,
     )
     return ordinals
 

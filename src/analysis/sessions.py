@@ -1,7 +1,8 @@
 import json
-from pathlib import Path
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Sequence
+from pathlib import Path
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import boto3
@@ -21,7 +22,7 @@ _S3_STORAGE_OPTIONS = {
 
 def load_attached_datasets(
     path: Path | str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Read the ``attached_datasets`` list from one of the repo's manifests:
     ``data_assets.json`` (where the shared processed dataset lives) or
     ``raw_sessions.json`` (which sessions of it this analysis uses, refreshed
@@ -38,7 +39,7 @@ def load_attached_datasets(
 DATASET_PROVENANCE_FILES = ("data_description.json", "processing.json")
 
 
-def fetch_dataset_provenance(uri: str, client: Any = None) -> Dict[str, bytes]:
+def fetch_dataset_provenance(uri: str, client: Any = None) -> dict[str, bytes]:
     """Raw bytes of each of :data:`DATASET_PROVENANCE_FILES` in the dataset at
     *uri*, keyed by file name -- saved verbatim with each run so it's known
     what built the tables it read. Raises if either file is missing.
@@ -62,7 +63,7 @@ DATASET_TABLES = ("session", "sites")
 
 def build_inputs(
     uri: str, session_ids: Sequence[str], client: Any = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Everything that goes into a run, for its ``inputs.json``: the dataset
     location, the selected session ids, and the size/etag of every dataset
     file the run reads (:data:`DATASET_TABLES` + :data:`DATASET_PROVENANCE_FILES`).
@@ -216,7 +217,7 @@ class Dataset:
         ]
         return pl.concat(frames).collect().to_pandas()
 
-    def subject_session_ids(self, subject_id: str) -> List[str]:
+    def subject_session_ids(self, subject_id: str) -> list[str]:
         """*subject_id*'s session ids, chronologically. Raises if there are none."""
         ids = sorted(
             self.session.loc[

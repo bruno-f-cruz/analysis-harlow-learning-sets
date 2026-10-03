@@ -57,10 +57,20 @@ def controls(mo):
                 0.5, 1.0, value=0.97, step=0.01, label="gamma (per s)", debounce=True
             ),
             "epsilon": mo.ui.slider(
-                0.0, 0.5, value=0.02, step=0.01, label="epsilon (training)", debounce=True
+                0.0,
+                0.5,
+                value=0.02,
+                step=0.01,
+                label="epsilon (training)",
+                debounce=True,
             ),
             "eval_epsilon": mo.ui.slider(
-                0.0, 0.5, value=0.0, step=0.01, label="epsilon (evaluation)", debounce=True
+                0.0,
+                0.5,
+                value=0.0,
+                step=0.01,
+                label="epsilon (evaluation)",
+                debounce=True,
             ),
             "q_init": mo.ui.slider(
                 0.0, 2.0, value=1.0, step=0.1, label="Q init", debounce=True
@@ -113,8 +123,12 @@ def simulate_agents(params):
 
         _prev_odor, _prev_outcome = _shift(out["odor"]), _shift(out["outcome"])
         _cols = {
-            "subject_id": np.broadcast_to(np.arange(_n_animals), (_n_steps, _n_animals)),
-            "trial": np.broadcast_to(np.arange(_n_steps)[:, None], (_n_steps, _n_animals)),
+            "subject_id": np.broadcast_to(
+                np.arange(_n_animals), (_n_steps, _n_animals)
+            ),
+            "trial": np.broadcast_to(
+                np.arange(_n_steps)[:, None], (_n_steps, _n_animals)
+            ),
             "block": out["block"],
             "trial_in_block": out["trial_in_block"],
             "stay": out["action"],
@@ -167,7 +181,9 @@ def optimal_policy(HarlowEnv, cfg, np, p, simulate):
             on_first = odors == self.first_odor
             return (first | (on_first == self.first_rewarded)).astype(np.int64)
 
-        def update(self, states, odors, actions, rewards, next_states, next_odors, durations):
+        def update(
+            self, states, odors, actions, rewards, next_states, next_odors, durations
+        ):
             # env.trial has already advanced: 1 means the action was the block's first.
             self.first_rewarded = np.where(
                 self.env.trial == 1, rewards > 0, self.first_rewarded
@@ -276,7 +292,6 @@ def summary(bootstrap_across_animals, cfg, df, mo, optimal_rate, rng):
         (rewarded or not), so P(reward | stay) cannot reach 1 after a skip.
         """
     )
-    return
 
 
 @app.cell
@@ -310,7 +325,6 @@ def choice_by_training(
         _ax.legend(loc="center right")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -341,7 +355,6 @@ def choice_by_block_position(
         _ax.legend()
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -390,7 +403,6 @@ def choice_by_odor_appearance(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -411,7 +423,7 @@ def choice_by_odor_appearance_first_stop_rewarded(
     presentation_style,
     sim_trials,
 ):
-    _cond = sim_trials[sim_trials["first_stop_rewarded"] == True]  # noqa: E712
+    _cond = sim_trials[sim_trials["first_stop_rewarded"] == True]
     _blue, _orange = categorical(2)
     with presentation_style():
         _fig, _ax = new_figure("standard")
@@ -424,7 +436,6 @@ def choice_by_odor_appearance_first_stop_rewarded(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -435,7 +446,7 @@ def choice_by_odor_appearance_first_stop_nonrewarded(
     presentation_style,
     sim_trials,
 ):
-    _cond = sim_trials[sim_trials["first_stop_rewarded"] == False]  # noqa: E712
+    _cond = sim_trials[sim_trials["first_stop_rewarded"] == False]
     _blue, _orange = categorical(2)
     with presentation_style():
         _fig, _ax = new_figure("standard")
@@ -448,7 +459,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -483,7 +493,6 @@ def choice_by_previous_trial(
         _ax.legend()
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -536,7 +545,6 @@ def reward_rate(
         _ax.legend(loc="lower right")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -553,8 +561,9 @@ def q_values(
     presentation_style,
     rng,
 ):
-    from analysis.plotting_style import sequential_cmap
     from harlow_rl.state import state_features
+
+    from analysis.plotting_style import sequential_cmap
 
     _, _same, _prev_outcome = state_features(env.config.state_mode, env.config.n_odors)
     _names = ["Rewarded", "Not rewarded", "Skipped"][: env.n_outcomes]
@@ -639,7 +648,6 @@ def q_values(
         _ax_leave.set_ylabel("Q(leave)")
         _fig.colorbar(_im_raw, ax=[_ax_stay, _ax_leave], label="Q (mean over animals)")
     _fig
-    return
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import platform
 import socket
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 #: Keys owned by :func:`build_manifest`'s own fixed/required fields. Callers
@@ -36,7 +36,7 @@ def _reject_reserved(extra: dict[str, Any]) -> None:
 def generate_run_id(now: str | None = None, suffix: str | None = None) -> str:
     """``<UTC timestamp>-<short random/git suffix>``, e.g. ``20260811T185500-a81f42c``."""
     if now is None:
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
     try:
         timestamp = datetime.fromisoformat(now).strftime("%Y%m%dT%H%M%S")
     except ValueError as exc:

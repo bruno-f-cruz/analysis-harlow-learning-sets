@@ -6,9 +6,9 @@ tracks each odor *identity*'s own timeline of consecutive occurrences across
 blocks/sessions, regardless of how many blocks separate two sightings of it.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from analysis.plotting import TWO_BY_TWO_COLORS, bootstrap_mean_ci
 from analysis.plotting_style import animal_palette
@@ -223,16 +223,24 @@ def plot_bias_first_site(
     ``{True: "tab:orange", False: "tab:blue"}``), now keyed to the odor's
     *previous* reward status since that's the only condition left.
     """
-    reward_colors = reward_colors if reward_colors is not None else {True: "tab:orange", False: "tab:blue"}
+    reward_colors = (
+        reward_colors
+        if reward_colors is not None
+        else {True: "tab:orange", False: "tab:blue"}
+    )
     per_animal = (
-        pairs_df.groupby(["subject_id", "prev_rewarded"])["stopped"].mean().reset_index()
+        pairs_df.groupby(["subject_id", "prev_rewarded"])["stopped"]
+        .mean()
+        .reset_index()
     )
 
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 5))
 
     subjects = sorted(per_animal["subject_id"].unique())
-    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    animal_colors = (
+        animal_colors if animal_colors is not None else animal_palette(subjects)
+    )
     rng = np.random.default_rng(0)
 
     for x, prev_rewarded in [(0, True), (1, False)]:
@@ -241,12 +249,21 @@ def plot_bias_first_site(
         if np.isnan(mean):
             continue
         yerr = [[max(mean - ci_lo, 0)], [max(ci_hi - mean, 0)]]
-        ax.bar(x, mean, color=reward_colors[prev_rewarded], alpha=0.85, width=0.65, zorder=2)
+        ax.bar(
+            x,
+            mean,
+            color=reward_colors[prev_rewarded],
+            alpha=0.85,
+            width=0.65,
+            zorder=2,
+        )
         ax.errorbar(
             x, mean, yerr=yerr, fmt="none", color="black", capsize=5, lw=1.5, zorder=3
         )
 
-    wide = per_animal.pivot(index="subject_id", columns="prev_rewarded", values="stopped")
+    wide = per_animal.pivot(
+        index="subject_id", columns="prev_rewarded", values="stopped"
+    )
     for subject_id, row in wide.iterrows():
         if True not in row.index or False not in row.index:
             continue
@@ -280,15 +297,24 @@ def block_identity_table(trials: pd.DataFrame) -> pd.DataFrame:
     so each block maps to a single ordered pair.
     """
     rs = trials[(trials["site_label"] == "RewardSite") & trials["block"].notna()]
-    rew = rs[rs["is_rewarded_odor"]].groupby(["subject_id", "session_id", "block"])["odor_index"]
-    non = rs[~rs["is_rewarded_odor"]].groupby(["subject_id", "session_id", "block"])["odor_index"]
+    rew = rs[rs["is_rewarded_odor"]].groupby(["subject_id", "session_id", "block"])[
+        "odor_index"
+    ]
+    non = rs[~rs["is_rewarded_odor"]].groupby(["subject_id", "session_id", "block"])[
+        "odor_index"
+    ]
     out = pd.concat(
-        [rew.agg(["nunique", "first"]).add_prefix("rew_"), non.agg(["nunique", "first"]).add_prefix("non_")],
+        [
+            rew.agg(["nunique", "first"]).add_prefix("rew_"),
+            non.agg(["nunique", "first"]).add_prefix("non_"),
+        ],
         axis=1,
     ).dropna()
     out = out[(out["rew_nunique"] == 1) & (out["non_nunique"] == 1)]
     return (
-        out.rename(columns={"rew_first": "rewarded", "non_first": "nonrewarded"})[["rewarded", "nonrewarded"]]
+        out.rename(columns={"rew_first": "rewarded", "non_first": "nonrewarded"})[
+            ["rewarded", "nonrewarded"]
+        ]
         .astype(int)
         .reset_index()
     )
@@ -304,7 +330,8 @@ def plot_block_identity_counts(blocks: pd.DataFrame, n_odors: int = 7, axes=None
     letters = [chr(ord("A") + i) for i in range(n_odors)]
     counts = {
         s: blocks[blocks["subject_id"] == s]
-        .groupby(["rewarded", "nonrewarded"]).size()
+        .groupby(["rewarded", "nonrewarded"])
+        .size()
         .unstack(fill_value=0)
         .reindex(index=range(n_odors), columns=range(n_odors), fill_value=0)
         for s in subjects
@@ -321,9 +348,16 @@ def plot_block_identity_counts(blocks: pd.DataFrame, n_odors: int = 7, axes=None
         for i in range(n_odors):
             for j in range(n_odors):
                 if i != j:
-                    ax.text(j, i, c[i, j], ha="center", va="center", fontsize=8,
-                            color="white" if c[i, j] < 0.6 * vmax else "black")
-    for ax in axes[len(subjects):-1]:
+                    ax.text(
+                        j,
+                        i,
+                        c[i, j],
+                        ha="center",
+                        va="center",
+                        fontsize=8,
+                        color="white" if c[i, j] < 0.6 * vmax else "black",
+                    )
+    for ax in axes[len(subjects) : -1]:
         ax.set_visible(False)
     if len(axes) > len(subjects):
         pdf_ax = axes[len(subjects)]
@@ -354,12 +388,22 @@ def plot_block_identity_counts(blocks: pd.DataFrame, n_odors: int = 7, axes=None
             sub.set_xlim(edges[0], edges[-1])
             sub.set_ylim(0, ymax * 1.05)
             sub.set_yticks([])
-            sub.text(0.98, 0.85, str(s), transform=sub.transAxes, ha="right", va="top", color=col)
+            sub.text(
+                0.98,
+                0.85,
+                str(s),
+                transform=sub.transAxes,
+                ha="right",
+                va="top",
+                color=col,
+            )
             if k < n - 1:
                 sub.set_xticks([])
                 sub.spines["bottom"].set_visible(False)
             else:
-                sub.set_xlabel("P(block identity)  (dashed = chance, 1/%d)" % len(pairs))
+                sub.set_xlabel(
+                    "P(block identity)  (dashed = chance, 1/%d)" % len(pairs)
+                )
             if k == n // 2:
                 sub.set_ylabel("Fraction of block identities")
     cax = axes[2].inset_axes([1.04, 0, 0.04, 1])
@@ -380,15 +424,25 @@ def block_identity_second_trial_table(trials: pd.DataFrame) -> pd.DataFrame:
     from analysis.counterfactual import counterfactual_block_table
 
     ident = block_identity_table(trials)
-    ident["p_occurrence"] = ident.groupby(["subject_id", "rewarded", "nonrewarded"])["block"].transform("size")
+    ident["p_occurrence"] = ident.groupby(["subject_id", "rewarded", "nonrewarded"])[
+        "block"
+    ].transform("size")
     ident["p_occurrence"] /= ident.groupby("subject_id")["block"].transform("size")
-    cf = counterfactual_block_table(trials).merge(ident, on=["subject_id", "session_id", "block"])
-    cf["p_stop"] = np.where(cf["first_stop_rewarded"], cf["stop_next_bad"], cf["stop_next_good"])
+    cf = counterfactual_block_table(trials).merge(
+        ident, on=["subject_id", "session_id", "block"]
+    )
+    cf["p_stop"] = np.where(
+        cf["first_stop_rewarded"], cf["stop_next_bad"], cf["stop_next_good"]
+    )
     cf["p_stop"] = pd.to_numeric(cf["p_stop"], errors="coerce")
     return (
         cf.dropna(subset=["p_stop"])
         .groupby(["subject_id", "rewarded", "nonrewarded", "first_stop_rewarded"])
-        .agg(p_occurrence=("p_occurrence", "first"), p_stop=("p_stop", "mean"), n=("p_stop", "size"))
+        .agg(
+            p_occurrence=("p_occurrence", "first"),
+            p_stop=("p_stop", "mean"),
+            n=("p_stop", "size"),
+        )
         .reset_index()
     )
 
@@ -400,25 +454,47 @@ def plot_occurrence_vs_second_trial(table: pd.DataFrame, colors: tuple, axes=Non
 
     subjects = sorted(table["subject_id"].unique())
     if axes is None:
-        _, axes = plt.subplots(2, len(subjects), figsize=(4 * len(subjects), 8), sharex=True, sharey=True)
-    rows = [(True, "P(Stop) non-rewarded odor\n(first stop rewarded)", colors[0]),
-            (False, "P(Stop) rewarded odor\n(first stop non-rewarded)", colors[1])]
+        _, axes = plt.subplots(
+            2, len(subjects), figsize=(4 * len(subjects), 8), sharex=True, sharey=True
+        )
+    rows = [
+        (True, "P(Stop) non-rewarded odor\n(first stop rewarded)", colors[0]),
+        (False, "P(Stop) rewarded odor\n(first stop non-rewarded)", colors[1]),
+    ]
     for r, (first_rew, ylabel, color) in enumerate(rows):
         for c, s in enumerate(subjects):
             ax = axes[r][c]
-            d = table[(table["subject_id"] == s) & (table["first_stop_rewarded"] == first_rew)]
-            ax.scatter(d["p_occurrence"], d["p_stop"], s=25 + 4 * d["n"], color=color, alpha=0.6, edgecolor="white", linewidth=0.5)
+            d = table[
+                (table["subject_id"] == s) & (table["first_stop_rewarded"] == first_rew)
+            ]
+            ax.scatter(
+                d["p_occurrence"],
+                d["p_stop"],
+                s=25 + 4 * d["n"],
+                color=color,
+                alpha=0.6,
+                edgecolor="white",
+                linewidth=0.5,
+            )
             if len(d) > 2 and d["p_occurrence"].nunique() > 1:
                 lr = stats.linregress(d["p_occurrence"], d["p_stop"])
                 xs = np.array([d["p_occurrence"].min(), d["p_occurrence"].max()])
                 ax.plot(xs, lr.intercept + lr.slope * xs, color="white", lw=1.5)
-                ax.text(0.03, 0.05, f"r = {lr.rvalue:.2f}, p = {lr.pvalue:.2f}", transform=ax.transAxes, fontsize=8)
+                ax.text(
+                    0.03,
+                    0.05,
+                    f"r = {lr.rvalue:.2f}, p = {lr.pvalue:.2f}",
+                    transform=ax.transAxes,
+                    fontsize=8,
+                )
             ax.set_ylim(-0.1, 1.1)
             ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
             if c == 0:
                 ax.set_ylabel(ylabel)
             if r == 0:
-                ax.text(0.5, 1.02, str(s), transform=ax.transAxes, ha="center", va="bottom")
+                ax.text(
+                    0.5, 1.02, str(s), transform=ax.transAxes, ha="center", va="bottom"
+                )
             if r == 1:
                 ax.set_xlabel("P(block identity)")
     return axes

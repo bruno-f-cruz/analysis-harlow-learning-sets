@@ -1,9 +1,9 @@
 """1-back within-block history GLM: feature construction, per-group fitting, and
 its reward-cell timecourse plot."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 
@@ -381,7 +381,9 @@ def _history_glm_cohort_grid(
 
     terms = list(terms_style)
     subjects = sorted(work["subject_id"].unique())
-    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    animal_colors = (
+        animal_colors if animal_colors is not None else animal_palette(subjects)
+    )
     rng = np.random.default_rng(seed)
 
     windows = sorted(work["window"].unique())
@@ -423,7 +425,9 @@ def _history_glm_cohort_grid(
             [np.concatenate([lo, hi]) for _, lo, hi in cohort.values()]
         )
         ci_bounds = ci_bounds[~np.isnan(ci_bounds)]
-        val_max = np.nanpercentile(np.abs(ci_bounds), clip_pct) if ci_bounds.size else 1.0
+        val_max = (
+            np.nanpercentile(np.abs(ci_bounds), clip_pct) if ci_bounds.size else 1.0
+        )
         clip_ylim = max(val_max * 1.3, 1.0)
 
     n_rows = 2
@@ -462,24 +466,41 @@ def _history_glm_cohort_grid(
             mean_plot, lo_plot, hi_plot = mean, ci_lo, ci_hi
         ax.plot(x[ok], mean_plot[ok], linewidth=2.2, color=style["color"], marker="o")
         ax.fill_between(
-            x[ok], lo_plot[ok], hi_plot[ok], color=style["color"], alpha=0.25, linewidth=0
+            x[ok],
+            lo_plot[ok],
+            hi_plot[ok],
+            color=style["color"],
+            alpha=0.25,
+            linewidth=0,
         )
         if clip_ylim is not None:
             clip_hi = ok & (ci_hi > clip_ylim)
             clip_lo = ok & (ci_lo < -clip_ylim)
             if np.any(clip_hi):
                 ax.plot(
-                    x[clip_hi], np.full(clip_hi.sum(), clip_ylim), marker="^",
-                    linestyle="none", color=style["color"], markersize=6, clip_on=False,
+                    x[clip_hi],
+                    np.full(clip_hi.sum(), clip_ylim),
+                    marker="^",
+                    linestyle="none",
+                    color=style["color"],
+                    markersize=6,
+                    clip_on=False,
                 )
             if np.any(clip_lo):
                 ax.plot(
-                    x[clip_lo], np.full(clip_lo.sum(), -clip_ylim), marker="v",
-                    linestyle="none", color=style["color"], markersize=6, clip_on=False,
+                    x[clip_lo],
+                    np.full(clip_lo.sum(), -clip_ylim),
+                    marker="v",
+                    linestyle="none",
+                    color=style["color"],
+                    markersize=6,
+                    clip_on=False,
                 )
 
         ax.axhline(ref, color="gray", linestyle=":", linewidth=1)
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=6, steps=[1, 2, 5, 10], integer=True))
+        ax.xaxis.set_major_locator(
+            MaxNLocator(nbins=6, steps=[1, 2, 5, 10], integer=True)
+        )
         if ai // n_cols == n_rows - 1:
             ax.set_xlabel("Block number")
         ax.set_title(style["label"], fontsize=10)
@@ -577,7 +598,9 @@ def plot_history_glm_cohort_by_window(
         terms_style = ONEHOT_CELL_STYLE
     else:
         terms_style = (
-            {**REWARD_CELL_STYLE, **BIAS_TERM_STYLE} if value == "weight" else REWARD_CELL_STYLE
+            {**REWARD_CELL_STYLE, **BIAS_TERM_STYLE}
+            if value == "weight"
+            else REWARD_CELL_STYLE
         )
     ylabel = {
         "weight": "GLM coefficient",
@@ -597,7 +620,9 @@ def plot_history_glm_cohort_by_window(
         ref,
         fixed_ylim=fixed_ylim,
         clip_percentile=(value == "weight"),
-        clip_pct=98 if len(set(ONEHOT_CELL_STYLE) & present) == len(ONEHOT_CELL_STYLE) else 90,
+        clip_pct=98
+        if len(set(ONEHOT_CELL_STYLE) & present) == len(ONEHOT_CELL_STYLE)
+        else 90,
         min_animals=min_animals,
         n_boot=n_boot,
         seed=seed,

@@ -179,7 +179,9 @@ def new_figure(kind: str = "standard", **subplot_kwargs):
 
 
 @contextmanager
-def presentation_style(font_scale: float = 1.3, line_width: float = 2.0, grid: bool = False):
+def presentation_style(
+    font_scale: float = 1.3, line_width: float = 2.0, grid: bool = False
+):
     """Dark-background rcParams for presentation/copy-paste PNGs.
 
     Mirrors :func:`analysis.plotting.a_lot_of_style`'s shape (a restorable

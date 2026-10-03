@@ -9,6 +9,7 @@ def load_dataset():
     from pathlib import Path
 
     import marimo as mo
+
     from analysis.sessions import Dataset
 
     root = Path(__file__).parent.parent
@@ -87,7 +88,6 @@ def show_dataset_summary(mo, summary):
             ),
         ]
     )
-    return
 
 
 @app.cell
@@ -130,7 +130,6 @@ def choice_by_block_position_raw(mo, selected_trials_all):
         _fig_paired.tight_layout()
 
     mo.vstack([_fig, _fig_paired])
-    return
 
 
 @app.cell
@@ -155,7 +154,6 @@ def choice_by_block_position_raw_by_tercile(selected_trials_all):
                 _ax.set_xlabel("")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -175,7 +173,6 @@ def choice_by_odor_appearance(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -191,11 +188,13 @@ def choice_by_odor_appearance_by_animal(selected_trials):
         _fig, _axes = _new_figure("square", nrows=2, ncols=3)
         _blue, _orange = _categorical(2)
         _plot_choice_by_odor_appearance_by_animal(
-            selected_trials, axes=_axes.flat, colors={True: _orange, False: _blue}, n_blocks=30
+            selected_trials,
+            axes=_axes.flat,
+            colors={True: _orange, False: _blue},
+            n_blocks=30,
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -219,7 +218,6 @@ def choice_by_odor_appearance_from_first_stop(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -247,7 +245,6 @@ def choice_by_odor_appearance_first_stop_rewarded(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -275,7 +272,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -303,7 +299,6 @@ def choice_by_odor_appearance_first_stop_rewarded_by_blocks(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -333,7 +328,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded_by_blocks(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -358,7 +352,6 @@ def counterfactual_p_stop_after_bad_first_stop_by_window(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -383,7 +376,6 @@ def counterfactual_p_stop_after_good_first_stop_by_window(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -407,7 +399,6 @@ def counterfactual_p_stop_first_last_scatter(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -428,7 +419,6 @@ def bias_first_site(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -444,7 +434,6 @@ def p_stop_first_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=0, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -460,7 +449,6 @@ def p_stop_hazard_second_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=1, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -476,7 +464,6 @@ def p_stop_hazard_third_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=2, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -489,7 +476,9 @@ def history_glm_fit(selected_trials):
     glm_skip_blocks = 20
 
     _glm_features = history_glm_features(selected_trials)
-    glm_windows = expand_to_block_windows(_glm_features, glm_window_blocks, glm_skip_blocks)
+    glm_windows = expand_to_block_windows(
+        _glm_features, glm_window_blocks, glm_skip_blocks
+    )
     glm_coefs_window = fit_history_glm(
         glm_windows, unit_col=["subject_id", "window"], coefs=list(ONEHOT_CELL_STYLE)
     )
@@ -498,7 +487,9 @@ def history_glm_fit(selected_trials):
         .set_index("window")[["window_start", "window_end"]]
         .sort_index()
     )
-    glm_chance = first_site_chance_by_window(selected_trials, glm_window_blocks, glm_skip_blocks)
+    glm_chance = first_site_chance_by_window(
+        selected_trials, glm_window_blocks, glm_skip_blocks
+    )
     print(
         f"{glm_window_blocks}-block windows, stride {glm_skip_blocks} -> "
         f"{len(glm_window_bounds)} window positions"
@@ -515,7 +506,9 @@ def history_glm_fit(selected_trials):
 
 @app.cell(hide_code=True)
 def history_glm_weights(glm_coefs_window, glm_window_bounds):
-    from analysis.glm import plot_history_glm_cohort_by_window as _plot_history_glm_cohort_by_window
+    from analysis.glm import (
+        plot_history_glm_cohort_by_window as _plot_history_glm_cohort_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
@@ -523,12 +516,13 @@ def history_glm_weights(glm_coefs_window, glm_window_bounds):
             glm_coefs_window, glm_window_bounds, value="weight"
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
 def history_glm_p_choice(glm_window_bounds, glm_windows):
-    from analysis.glm import plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window
+    from analysis.glm import (
+        plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
@@ -536,7 +530,6 @@ def history_glm_p_choice(glm_window_bounds, glm_windows):
             glm_windows, glm_window_bounds, value="p_choice"
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -545,20 +538,25 @@ def history_glm_p_choice_minus_chance(
     glm_window_bounds,
     glm_windows,
 ):
-    from analysis.glm import plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window
+    from analysis.glm import (
+        plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
         _fig, _axes = _plot_history_glm_empirical_by_window(
-            glm_windows, glm_window_bounds, value="p_choice_minus_chance", chance=glm_chance
+            glm_windows,
+            glm_window_bounds,
+            value="p_choice_minus_chance",
+            chance=glm_chance,
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
 def counterfactual_cohort_minus_chance(selected_trials):
     import matplotlib.pyplot as _plt
+
     from analysis.counterfactual import (
         plot_counterfactual_cohort_minus_chance as _plot_counterfactual_cohort_minus_chance,
     )
@@ -570,13 +568,15 @@ def counterfactual_cohort_minus_chance(selected_trials):
         for _col, _exclude in enumerate([(), ["864845"]]):
             for _row, _subtract in enumerate([True, False]):
                 _plot_counterfactual_cohort_minus_chance(
-                    selected_trials, window_blocks=100, skip_blocks=20,
-                    exclude_subjects=_exclude, subtract_chance=_subtract,
+                    selected_trials,
+                    window_blocks=100,
+                    skip_blocks=20,
+                    exclude_subjects=_exclude,
+                    subtract_chance=_subtract,
                     ax=_axes[_row][_col],
                 )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -600,7 +600,9 @@ def history_glm_first_stop_fit(
         _expand_to_block_windows(_feats, glm_window_blocks, glm_skip_blocks)
     )
     glm1_coefs_window = _fit_history_glm(
-        glm1_windows, unit_col=["subject_id", "window"], coefs=[_c for _c in _ONEHOT_CELL_STYLE if not _c.endswith("_Skip")]
+        glm1_windows,
+        unit_col=["subject_id", "window"],
+        coefs=[_c for _c in _ONEHOT_CELL_STYLE if not _c.endswith("_Skip")],
     )
     glm1_window_bounds = (
         glm1_windows.drop_duplicates("window")
@@ -618,7 +620,6 @@ def history_glm_first_stop_weights(glm1_coefs_window, glm1_window_bounds):
     with _presentation_style():
         _fig, _axes = _plot(glm1_coefs_window, glm1_window_bounds, value="weight")
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -629,7 +630,6 @@ def history_glm_first_stop_p_choice(glm1_window_bounds, glm1_windows):
     with _presentation_style():
         _fig, _axes = _plot(glm1_windows, glm1_window_bounds, value="p_choice")
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -642,14 +642,19 @@ def history_glm_first_stop_p_choice_minus_chance(
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
-        _fig, _axes = _plot(glm1_windows, glm1_window_bounds, value="p_choice_minus_chance", chance=glm_chance)
+        _fig, _axes = _plot(
+            glm1_windows,
+            glm1_window_bounds,
+            value="p_choice_minus_chance",
+            chance=glm_chance,
+        )
     _fig
-    return
 
 
 @app.cell
 def block_identity_counts(selected_trials):
     import matplotlib.pyplot as _plt
+
     from analysis.bias import block_identity_table as _block_identity_table
     from analysis.bias import plot_block_identity_counts as _plot_block_identity_counts
     from analysis.plotting_style import presentation_style as _presentation_style
@@ -661,12 +666,13 @@ def block_identity_counts(selected_trials):
         _plot_block_identity_counts(_blocks, axes=_axes)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
 def include_degenerate_toggle(mo):
-    include_degenerate = mo.ui.switch(label="Include blocks with p_stay <= 0.1 / >= 0.9 (no degenerate-block exclusion)")
+    include_degenerate = mo.ui.switch(
+        label="Include blocks with p_stay <= 0.1 / >= 0.9 (no degenerate-block exclusion)"
+    )
     include_degenerate
     return (include_degenerate,)
 
@@ -678,6 +684,7 @@ def occurrence_vs_second_trial(
     selected_trials_all,
 ):
     import matplotlib.pyplot as _plt
+
     from analysis.bias import block_identity_second_trial_table as _second_trial_table
     from analysis.bias import plot_occurrence_vs_second_trial as _plot_occ_vs_second
     from analysis.plotting_style import categorical as _categorical
@@ -692,7 +699,6 @@ def occurrence_vs_second_trial(
         _plot_occ_vs_second(_table, colors=(_blue, _orange), axes=_axes)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -748,12 +754,26 @@ def velocity_aligned_to_site(analysis_trials, dataset):
             ["odor_index", "has_choice"]
         ):
             _rows.append(
-                (_subject, _sid, int(_odor), bool(_choice), len(_g), _mat[_g.index].mean(axis=0))
+                (
+                    _subject,
+                    _sid,
+                    int(_odor),
+                    bool(_choice),
+                    len(_g),
+                    _mat[_g.index].mean(axis=0),
+                )
             )
 
     vel_by_session = pd.DataFrame(
         _rows,
-        columns=["subject_id", "session_id", "odor_index", "has_choice", "n_trials", "trace"],
+        columns=[
+            "subject_id",
+            "session_id",
+            "odor_index",
+            "has_choice",
+            "n_trials",
+            "trace",
+        ],
     )
     print(vel_by_session.groupby("subject_id")["session_id"].nunique())
     return np, pd, vel_by_session, vel_t
@@ -762,6 +782,7 @@ def velocity_aligned_to_site(analysis_trials, dataset):
 @app.cell
 def velocity_aligned_plot(np, pd, vel_by_session, vel_t):
     import matplotlib.pyplot as _plt
+
     from analysis.plotting import bootstrap_group_stats as _bootstrap_group_stats
     from analysis.plotting import plot_mean_ci_band as _plot_mean_ci_band
     from analysis.plotting_style import categorical as _categorical
@@ -775,7 +796,11 @@ def velocity_aligned_plot(np, pd, vel_by_session, vel_t):
 
     with _presentation_style():
         _fig, _axes = _plt.subplots(
-            len(_subjects), 7, figsize=(24, 3 * len(_subjects)), sharex=True, sharey="row",
+            len(_subjects),
+            7,
+            figsize=(24, 3 * len(_subjects)),
+            sharex=True,
+            sharey="row",
             squeeze=False,
         )
         for _row, _subject in enumerate(_subjects):
@@ -791,39 +816,57 @@ def velocity_aligned_plot(np, pd, vel_by_session, vel_t):
                     # One animal per row, so there is no across-animal N: the CI
                     # bootstraps this animal's per-session means instead.
                     _traces = np.stack(_d["trace"].to_numpy())  # (n_sessions, n_time)
-                    _long = pd.DataFrame({"v": _traces.ravel(), "t": np.tile(vel_t, len(_d))})
-                    _stats = _bootstrap_group_stats(_long["v"], _long["t"], _rng, n_boot=500)
-                    _plot_mean_ci_band(_ax, _stats, _colors[_choice], label=_labels[_choice])
+                    _long = pd.DataFrame(
+                        {"v": _traces.ravel(), "t": np.tile(vel_t, len(_d))}
+                    )
+                    _stats = _bootstrap_group_stats(
+                        _long["v"], _long["t"], _rng, n_boot=500
+                    )
+                    _plot_mean_ci_band(
+                        _ax, _stats, _colors[_choice], label=_labels[_choice]
+                    )
                 _ax.axvline(0, color="#898781", lw=1)
                 # Odor label as in-axes text (presentation figures carry no titles).
                 if _row == 0:
-                    _ax.text(0.5, 0.97, f"Odor {_odor}", transform=_ax.transAxes,
-                             ha="center", va="top")
+                    _ax.text(
+                        0.5,
+                        0.97,
+                        f"Odor {_odor}",
+                        transform=_ax.transAxes,
+                        ha="center",
+                        va="top",
+                    )
                 if _row == len(_subjects) - 1:
                     _ax.set_xlabel("Time from site onset (s)")
             _axes[_row, 0].set_ylabel(f"{_subject} velocity")
         _axes[0, -1].legend(loc="upper right", bbox_to_anchor=(1.0, 0.9))
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
 def velocity_by_condition_plot(np, pd, vel_by_session, vel_t):
     import matplotlib.pyplot as _plt
+
     from analysis.plotting import bootstrap_group_stats as _bootstrap_group_stats
     from analysis.plotting import plot_mean_ci_band as _plot_mean_ci_band
     from analysis.plotting_style import categorical as _categorical
     from analysis.plotting_style import presentation_style as _presentation_style
 
     _rng = np.random.default_rng(0)
-    _odor_colors = dict(zip(range(7), _categorical(7)))  # same color per odor everywhere
+    _odor_colors = dict(
+        zip(range(7), _categorical(7))
+    )  # same color per odor everywhere
     _conditions = {False: "No choice", True: "Choice"}
     _subjects = sorted(vel_by_session["subject_id"].unique())
 
     with _presentation_style():
         _fig, _axes = _plt.subplots(
-            2, len(_subjects), figsize=(4 * len(_subjects), 7), sharex=True, sharey="col",
+            2,
+            len(_subjects),
+            figsize=(4 * len(_subjects), 7),
+            sharex=True,
+            sharey="col",
             squeeze=False,
         )
         for _col, _subject in enumerate(_subjects):
@@ -839,20 +882,29 @@ def velocity_by_condition_plot(np, pd, vel_by_session, vel_t):
                     # One animal per column, so there is no across-animal N: the CI
                     # bootstraps this animal's per-session means instead.
                     _traces = np.stack(_d["trace"].to_numpy())  # (n_sessions, n_time)
-                    _long = pd.DataFrame({"v": _traces.ravel(), "t": np.tile(vel_t, len(_d))})
-                    _stats = _bootstrap_group_stats(_long["v"], _long["t"], _rng, n_boot=500)
+                    _long = pd.DataFrame(
+                        {"v": _traces.ravel(), "t": np.tile(vel_t, len(_d))}
+                    )
+                    _stats = _bootstrap_group_stats(
+                        _long["v"], _long["t"], _rng, n_boot=500
+                    )
                     _plot_mean_ci_band(_ax, _stats, _color, label=f"Odor {_odor}")
                 _ax.axvline(0, color="#898781", lw=1)
                 if _cond_label == "No choice":
-                    _ax.text(0.5, 0.97, _subject, transform=_ax.transAxes,
-                             ha="center", va="top")
+                    _ax.text(
+                        0.5,
+                        0.97,
+                        _subject,
+                        transform=_ax.transAxes,
+                        ha="center",
+                        va="top",
+                    )
                 if _col == 0:
                     _ax.set_ylabel(f"{_cond_label} velocity")
             _axes[-1, _col].set_xlabel("Time from site onset (s)")
         _axes[0, -1].legend(loc="upper right", bbox_to_anchor=(1.0, 0.9), ncol=2)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -869,23 +921,38 @@ def lick_rate_aligned_to_choice_cue(analysis_trials, dataset, np, pd):
         _l = dataset.load_table("licks", [_sid])
         _onsets = np.sort(_l.loc[_l["is_lick_onset"], "timestamp"].to_numpy())
         _tr = _tr.reset_index(drop=True)
-        _edges = _tr["choice_cue_time"].to_numpy()[:, None] + lick_edges  # (n_trials, n_edges)
-        _counts = np.diff(np.searchsorted(_onsets, _edges), axis=1)  # (n_trials, n_bins)
+        _edges = (
+            _tr["choice_cue_time"].to_numpy()[:, None] + lick_edges
+        )  # (n_trials, n_edges)
+        _counts = np.diff(
+            np.searchsorted(_onsets, _edges), axis=1
+        )  # (n_trials, n_bins)
         for _rewarded, _g in _tr.groupby("has_reward"):
             _rows.append(
-                (_subject, _sid, bool(_rewarded), len(_g), _counts[_g.index].mean(axis=0) / LICK_BIN)
+                (
+                    _subject,
+                    _sid,
+                    bool(_rewarded),
+                    len(_g),
+                    _counts[_g.index].mean(axis=0) / LICK_BIN,
+                )
             )
 
     lick_by_session = pd.DataFrame(
         _rows, columns=["subject_id", "session_id", "rewarded", "n_trials", "trace"]
     )
-    print(lick_by_session.groupby(["subject_id", "rewarded"])["session_id"].nunique().unstack())
+    print(
+        lick_by_session.groupby(["subject_id", "rewarded"])["session_id"]
+        .nunique()
+        .unstack()
+    )
     return LICK_BIN, lick_by_session, lick_edges, lick_t
 
 
 @app.cell
 def lick_rate_plot(lick_by_session, lick_t, np, pd):
     import matplotlib.pyplot as _plt
+
     from analysis.plotting import bootstrap_group_stats as _bootstrap_group_stats
     from analysis.plotting import plot_mean_ci_band as _plot_mean_ci_band
     from analysis.plotting_style import categorical as _categorical
@@ -898,7 +965,11 @@ def lick_rate_plot(lick_by_session, lick_t, np, pd):
 
     with _presentation_style():
         _fig, _axes = _plt.subplots(
-            1, len(_subjects), figsize=(4 * len(_subjects), 4), sharex=True, sharey=True,
+            1,
+            len(_subjects),
+            figsize=(4 * len(_subjects), 4),
+            sharex=True,
+            sharey=True,
             squeeze=False,
         )
         for _ax, _subject in zip(_axes[0], _subjects):
@@ -912,17 +983,22 @@ def lick_rate_plot(lick_by_session, lick_t, np, pd):
                 # One animal per panel, so there is no across-animal N: the CI
                 # bootstraps this animal's per-session means instead.
                 _traces = np.stack(_d["trace"].to_numpy())  # (n_sessions, n_bins)
-                _long = pd.DataFrame({"v": _traces.ravel(), "t": np.tile(lick_t, len(_d))})
-                _stats = _bootstrap_group_stats(_long["v"], _long["t"], _rng, n_boot=500)
+                _long = pd.DataFrame(
+                    {"v": _traces.ravel(), "t": np.tile(lick_t, len(_d))}
+                )
+                _stats = _bootstrap_group_stats(
+                    _long["v"], _long["t"], _rng, n_boot=500
+                )
                 _plot_mean_ci_band(_ax, _stats, _color, label=_label)
             _ax.axvline(0, color="#898781", lw=1)
-            _ax.text(0.5, 0.97, _subject, transform=_ax.transAxes, ha="center", va="top")
+            _ax.text(
+                0.5, 0.97, _subject, transform=_ax.transAxes, ha="center", va="top"
+            )
             _ax.set_xlabel("Time from choice cue (s)")
         _axes[0, 0].set_ylabel("Lick rate (Hz)")
         _axes[0, -1].legend(loc="upper right", bbox_to_anchor=(1.0, 0.9))
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -930,14 +1006,16 @@ def second_site_trials(analysis_trials, np):
     # Second reward site of every block, labelled by what happened at the first.
     # Needs a stop at the first site (otherwise there is no "first stop" outcome).
     _rs = analysis_trials[
-        (analysis_trials["site_label"] == "RewardSite") & analysis_trials["block"].notna()
+        (analysis_trials["site_label"] == "RewardSite")
+        & analysis_trials["block"].notna()
     ].sort_values(["session_id", "block", "start_time"])
     _rs = _rs.assign(pos=_rs.groupby(["session_id", "block"]).cumcount())
     _first = _rs[_rs["pos"] == 0].set_index(["session_id", "block"])
     _second = _rs[_rs["pos"] == 1].set_index(["session_id", "block"])
 
     second_site = _second.join(
-        _first[["odor_index", "has_choice", "has_reward"]].add_prefix("first_"), how="inner"
+        _first[["odor_index", "has_choice", "has_reward"]].add_prefix("first_"),
+        how="inner",
     ).reset_index()
     second_site = second_site[second_site["first_has_choice"]].assign(
         first_stop_rewarded=lambda d: d["first_has_reward"].astype(bool),
@@ -959,7 +1037,9 @@ def second_site_trials(analysis_trials, np):
         second_site["start_time"] + second_site["subject_id"].map(_latency),
     )
     print(
-        second_site.groupby(["subject_id", "first_stop_rewarded", "same_odor", "stopped"])
+        second_site.groupby(
+            ["subject_id", "first_stop_rewarded", "same_odor", "stopped"]
+        )
         .size()
         .unstack("subject_id")
     )
@@ -992,24 +1072,32 @@ def second_site_traces(
         _lick_mat = np.diff(np.searchsorted(_onsets, _edges), axis=1) / LICK_BIN  # Hz
 
         for _cond, _g in _tr.groupby(_keys):
-            _vel_rows.append((_subject, _sid, *_cond, len(_g), _vel_mat[_g.index].mean(axis=0)))
-            _lick_rows.append((_subject, _sid, *_cond, len(_g), _lick_mat[_g.index].mean(axis=0)))
+            _vel_rows.append(
+                (_subject, _sid, *_cond, len(_g), _vel_mat[_g.index].mean(axis=0))
+            )
+            _lick_rows.append(
+                (_subject, _sid, *_cond, len(_g), _lick_mat[_g.index].mean(axis=0))
+            )
 
     _cols = ["subject_id", "session_id", *_keys, "n_trials", "trace"]
     second_site_vel = pd.DataFrame(_vel_rows, columns=_cols)
     second_site_lick = pd.DataFrame(_lick_rows, columns=_cols)
-    print(second_site_vel.groupby(["subject_id", *_keys])["session_id"].nunique().unstack("subject_id"))
+    print(
+        second_site_vel.groupby(["subject_id", *_keys])["session_id"]
+        .nunique()
+        .unstack("subject_id")
+    )
     return second_site_lick, second_site_vel
 
 
 @app.cell
 def second_site_plot_helper(np, pd):
     import matplotlib.pyplot as _plt
+
     from analysis.plotting import bootstrap_group_stats as _bootstrap_group_stats
     from analysis.plotting import plot_mean_ci_band as _plot_mean_ci_band
     from analysis.plotting_style import categorical as _categorical
     from analysis.plotting_style import presentation_style as _presentation_style
-
 
     def plot_second_site_grid(by_session, t, xlabel, ylabel):
         """Animals as columns; one row for stops and one for skips. Color is the
@@ -1026,8 +1114,12 @@ def second_site_plot_helper(np, pd):
         subjects = sorted(by_session["subject_id"].unique())
         with _presentation_style():
             fig, axes = _plt.subplots(
-                len(rows), len(subjects), figsize=(4 * len(subjects), 3.5 * len(rows)),
-                sharex=True, sharey="col", squeeze=False,
+                len(rows),
+                len(subjects),
+                figsize=(4 * len(subjects), 3.5 * len(rows)),
+                sharex=True,
+                sharey="col",
+                squeeze=False,
             )
             for c, subject in enumerate(subjects):
                 for ax, (stopped, row_label) in zip(axes[:, c], rows):
@@ -1042,19 +1134,34 @@ def second_site_plot_helper(np, pd):
                             if len(d) < 2:  # too few sessions for a CI
                                 continue
                             traces = np.stack(d["trace"].to_numpy())
-                            long = pd.DataFrame({"v": traces.ravel(), "t": np.tile(t, len(d))})
-                            stats = _bootstrap_group_stats(long["v"], long["t"], rng, n_boot=500)
+                            long = pd.DataFrame(
+                                {"v": traces.ravel(), "t": np.tile(t, len(d))}
+                            )
+                            stats = _bootstrap_group_stats(
+                                long["v"], long["t"], rng, n_boot=500
+                            )
                             _plot_mean_ci_band(
-                                ax, stats, color, linestyle=linestyle,
+                                ax,
+                                stats,
+                                color,
+                                linestyle=linestyle,
                                 label=f"{first_labels[rewarded]}, {odor_label}",
                             )
                     ax.axvline(0, color="#898781", lw=1)
                     if c == 0:
                         ax.set_ylabel(f"{row_label}  {ylabel}")
-                axes[0, c].text(0.5, 1.0, subject, transform=axes[0, c].transAxes,
-                                ha="center", va="bottom")
+                axes[0, c].text(
+                    0.5,
+                    1.0,
+                    subject,
+                    transform=axes[0, c].transAxes,
+                    ha="center",
+                    va="bottom",
+                )
                 axes[-1, c].set_xlabel(xlabel)
-            axes[0, -1].legend(loc="upper right", bbox_to_anchor=(1.0, 0.85), fontsize=9)
+            axes[0, -1].legend(
+                loc="upper right", bbox_to_anchor=(1.0, 0.85), fontsize=9
+            )
             fig.tight_layout()
         return fig
 
@@ -1063,14 +1170,16 @@ def second_site_plot_helper(np, pd):
 
 @app.cell
 def second_site_velocity_plot(plot_second_site_grid, second_site_vel, vel_t):
-    plot_second_site_grid(second_site_vel, vel_t, "Time from site onset (s)", "velocity")
-    return
+    plot_second_site_grid(
+        second_site_vel, vel_t, "Time from site onset (s)", "velocity"
+    )
 
 
 @app.cell
 def second_site_lick_plot(lick_t, plot_second_site_grid, second_site_lick):
-    plot_second_site_grid(second_site_lick, lick_t, "Time from choice cue (s)", "lick rate (Hz)")
-    return
+    plot_second_site_grid(
+        second_site_lick, lick_t, "Time from choice cue (s)", "lick rate (Hz)"
+    )
 
 
 @app.cell
@@ -1085,7 +1194,8 @@ def first_vs_later_stop_traces(
 ):
     # Every stop at a reward site, flagged as the block's first stop or a later one.
     _rs = analysis_trials[
-        (analysis_trials["site_label"] == "RewardSite") & analysis_trials["block"].notna()
+        (analysis_trials["site_label"] == "RewardSite")
+        & analysis_trials["block"].notna()
     ].sort_values(["session_id", "block", "start_time"])
     _stops = _rs[_rs["has_choice"]].copy()
     _stops["first_stop"] = ~_stops.duplicated(["session_id", "block"])
@@ -1105,8 +1215,18 @@ def first_vs_later_stop_traces(
         _lick_mat = np.diff(np.searchsorted(_onsets, _edges), axis=1) / LICK_BIN  # Hz
 
         for _first, _g in _tr.groupby("first_stop"):
-            _vel_rows.append((_subject, _sid, bool(_first), len(_g), _vel_mat[_g.index].mean(axis=0)))
-            _lick_rows.append((_subject, _sid, bool(_first), len(_g), _lick_mat[_g.index].mean(axis=0)))
+            _vel_rows.append(
+                (_subject, _sid, bool(_first), len(_g), _vel_mat[_g.index].mean(axis=0))
+            )
+            _lick_rows.append(
+                (
+                    _subject,
+                    _sid,
+                    bool(_first),
+                    len(_g),
+                    _lick_mat[_g.index].mean(axis=0),
+                )
+            )
 
     _cols = ["subject_id", "session_id", "first_stop", "n_trials", "trace"]
     first_vs_later_vel = pd.DataFrame(_vel_rows, columns=_cols)
@@ -1125,6 +1245,7 @@ def first_vs_later_stop_plot(
     vel_t,
 ):
     import matplotlib.pyplot as _plt
+
     from analysis.plotting import bootstrap_group_stats as _bootstrap_group_stats
     from analysis.plotting import plot_mean_ci_band as _plot_mean_ci_band
     from analysis.plotting_style import categorical as _categorical
@@ -1132,7 +1253,10 @@ def first_vs_later_stop_plot(
 
     _rng = np.random.default_rng(0)
     _slots = _categorical(4)
-    _lines = {True: ("First stop in block", _slots[2]), False: ("Later stops", _slots[3])}
+    _lines = {
+        True: ("First stop in block", _slots[2]),
+        False: ("Later stops", _slots[3]),
+    }
     _modalities = [
         (first_vs_later_vel, vel_t, "Time from site onset (s)", "Velocity"),
         (first_vs_later_lick, lick_t, "Time from choice cue (s)", "Lick rate (Hz)"),
@@ -1141,7 +1265,11 @@ def first_vs_later_stop_plot(
 
     with _presentation_style():
         _fig, _axes = _plt.subplots(
-            2, len(_subjects), figsize=(4 * len(_subjects), 7), sharey="row", squeeze=False,
+            2,
+            len(_subjects),
+            figsize=(4 * len(_subjects), 7),
+            sharey="row",
+            squeeze=False,
         )
         for _row, (_by_session, _t, _xlabel, _ylabel) in enumerate(_modalities):
             for _ax, _subject in zip(_axes[_row], _subjects):
@@ -1155,23 +1283,34 @@ def first_vs_later_stop_plot(
                     # One animal per column, so the CI bootstraps this animal's
                     # per-session means (no across-animal N).
                     _traces = np.stack(_d["trace"].to_numpy())
-                    _long = pd.DataFrame({"v": _traces.ravel(), "t": np.tile(_t, len(_d))})
-                    _stats = _bootstrap_group_stats(_long["v"], _long["t"], _rng, n_boot=500)
+                    _long = pd.DataFrame(
+                        {"v": _traces.ravel(), "t": np.tile(_t, len(_d))}
+                    )
+                    _stats = _bootstrap_group_stats(
+                        _long["v"], _long["t"], _rng, n_boot=500
+                    )
                     _plot_mean_ci_band(_ax, _stats, _color, label=_label)
                 _ax.axvline(0, color="#898781", lw=1)
                 _ax.set_xlabel(_xlabel)
                 if _row == 0:
-                    _ax.text(0.5, 1.0, _subject, transform=_ax.transAxes, ha="center", va="bottom")
+                    _ax.text(
+                        0.5,
+                        1.0,
+                        _subject,
+                        transform=_ax.transAxes,
+                        ha="center",
+                        va="bottom",
+                    )
             _axes[_row, 0].set_ylabel(_ylabel)
         _axes[0, -1].legend(loc="upper right", bbox_to_anchor=(1.0, 0.85))
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
 def block_transition_first_site(selected_trials, selected_trials_all):
     import matplotlib.pyplot as _plt
+
     from analysis.block_transitions import (
         plot_first_site_p_stop_by_transition as _plot_first_site_p_stop_by_transition,
     )
@@ -1183,19 +1322,24 @@ def block_transition_first_site(selected_trials, selected_trials_all):
         _fig, _axes = _plt.subplots(1, 2, figsize=(16, 5.5), sharey=True)
         for _ax, (_trials, _label) in zip(
             _axes,
-            [(selected_trials_all, "All blocks"), (selected_trials, "Excluding degenerate blocks")],
+            [
+                (selected_trials_all, "All blocks"),
+                (selected_trials, "Excluding degenerate blocks"),
+            ],
         ):
             _plot_first_site_p_stop_by_transition(_trials, ax=_ax)
-            _ax.text(0.02, 0.02, _label, transform=_ax.transAxes, ha="left", va="bottom")
+            _ax.text(
+                0.02, 0.02, _label, transform=_ax.transAxes, ha="left", va="bottom"
+            )
         _axes[1].set_ylabel("")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
 def block_transition_first_site_by_window(selected_trials):
     import matplotlib.pyplot as _plt
+
     from analysis.block_transitions import (
         plot_first_site_p_stop_by_transition_window as _plot_by_window,
     )
@@ -1208,7 +1352,6 @@ def block_transition_first_site_by_window(selected_trials):
         _plot_by_window(selected_trials, window_blocks=100, skip_blocks=20, axes=_axes)
         _fig.tight_layout()
     _fig
-    return
 
 
 if __name__ == "__main__":

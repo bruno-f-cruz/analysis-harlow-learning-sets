@@ -9,6 +9,7 @@ def load_dataset():
     from pathlib import Path
 
     import marimo as mo
+
     from analysis.sessions import Dataset
 
     root = Path(__file__).parent.parent
@@ -87,7 +88,6 @@ def show_dataset_summary(mo, summary):
             ),
         ]
     )
-    return
 
 
 @app.cell
@@ -130,7 +130,6 @@ def choice_by_block_position_raw(mo, selected_trials_all):
         _fig_paired.tight_layout()
 
     mo.vstack([_fig, _fig_paired])
-    return
 
 
 @app.cell
@@ -155,7 +154,6 @@ def choice_by_block_position_raw_by_tercile(selected_trials_all):
                 _ax.set_xlabel("")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -175,7 +173,6 @@ def choice_by_odor_appearance(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -191,11 +188,13 @@ def choice_by_odor_appearance_by_animal(selected_trials):
         _fig, _axes = _new_figure("square", nrows=2, ncols=3)
         _blue, _orange = _categorical(2)
         _plot_choice_by_odor_appearance_by_animal(
-            selected_trials, axes=_axes.flat, colors={True: _orange, False: _blue}, n_blocks=30
+            selected_trials,
+            axes=_axes.flat,
+            colors={True: _orange, False: _blue},
+            n_blocks=30,
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -219,7 +218,6 @@ def choice_by_odor_appearance_from_first_stop(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -247,7 +245,6 @@ def choice_by_odor_appearance_first_stop_rewarded(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -275,7 +272,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -303,7 +299,6 @@ def choice_by_odor_appearance_first_stop_rewarded_by_blocks(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -333,7 +328,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded_by_blocks(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -358,7 +352,6 @@ def counterfactual_p_stop_after_bad_first_stop_by_window(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -383,7 +376,6 @@ def counterfactual_p_stop_after_good_first_stop_by_window(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -407,7 +399,6 @@ def counterfactual_p_stop_first_last_scatter(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -428,7 +419,6 @@ def bias_first_site(selected_trials):
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -444,7 +434,6 @@ def p_stop_first_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=0, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -460,7 +449,6 @@ def p_stop_hazard_second_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=1, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -476,7 +464,6 @@ def p_stop_hazard_third_site_by_session(selected_trials):
         _plot_p_stop_hazard_by_session(selected_trials, position=2, ax=_ax)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -489,7 +476,9 @@ def history_glm_fit(selected_trials):
     glm_skip_blocks = 20
 
     _glm_features = history_glm_features(selected_trials)
-    glm_windows = expand_to_block_windows(_glm_features, glm_window_blocks, glm_skip_blocks)
+    glm_windows = expand_to_block_windows(
+        _glm_features, glm_window_blocks, glm_skip_blocks
+    )
     glm_coefs_window = fit_history_glm(
         glm_windows, unit_col=["subject_id", "window"], coefs=list(ONEHOT_CELL_STYLE)
     )
@@ -498,7 +487,9 @@ def history_glm_fit(selected_trials):
         .set_index("window")[["window_start", "window_end"]]
         .sort_index()
     )
-    glm_chance = first_site_chance_by_window(selected_trials, glm_window_blocks, glm_skip_blocks)
+    glm_chance = first_site_chance_by_window(
+        selected_trials, glm_window_blocks, glm_skip_blocks
+    )
     print(
         f"{glm_window_blocks}-block windows, stride {glm_skip_blocks} -> "
         f"{len(glm_window_bounds)} window positions"
@@ -515,7 +506,9 @@ def history_glm_fit(selected_trials):
 
 @app.cell(hide_code=True)
 def history_glm_weights(glm_coefs_window, glm_window_bounds):
-    from analysis.glm import plot_history_glm_cohort_by_window as _plot_history_glm_cohort_by_window
+    from analysis.glm import (
+        plot_history_glm_cohort_by_window as _plot_history_glm_cohort_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
@@ -523,12 +516,13 @@ def history_glm_weights(glm_coefs_window, glm_window_bounds):
             glm_coefs_window, glm_window_bounds, value="weight"
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
 def history_glm_p_choice(glm_window_bounds, glm_windows):
-    from analysis.glm import plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window
+    from analysis.glm import (
+        plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
@@ -536,7 +530,6 @@ def history_glm_p_choice(glm_window_bounds, glm_windows):
             glm_windows, glm_window_bounds, value="p_choice"
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -545,20 +538,25 @@ def history_glm_p_choice_minus_chance(
     glm_window_bounds,
     glm_windows,
 ):
-    from analysis.glm import plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window
+    from analysis.glm import (
+        plot_history_glm_empirical_by_window as _plot_history_glm_empirical_by_window,
+    )
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
         _fig, _axes = _plot_history_glm_empirical_by_window(
-            glm_windows, glm_window_bounds, value="p_choice_minus_chance", chance=glm_chance
+            glm_windows,
+            glm_window_bounds,
+            value="p_choice_minus_chance",
+            chance=glm_chance,
         )
     _fig
-    return
 
 
 @app.cell(hide_code=True)
 def counterfactual_cohort_minus_chance(selected_trials):
     import matplotlib.pyplot as _plt
+
     from analysis.counterfactual import (
         plot_counterfactual_cohort_minus_chance as _plot_counterfactual_cohort_minus_chance,
     )
@@ -570,13 +568,15 @@ def counterfactual_cohort_minus_chance(selected_trials):
         for _col, _exclude in enumerate([(), ["864845"]]):
             for _row, _subtract in enumerate([True, False]):
                 _plot_counterfactual_cohort_minus_chance(
-                    selected_trials, window_blocks=100, skip_blocks=20,
-                    exclude_subjects=_exclude, subtract_chance=_subtract,
+                    selected_trials,
+                    window_blocks=100,
+                    skip_blocks=20,
+                    exclude_subjects=_exclude,
+                    subtract_chance=_subtract,
                     ax=_axes[_row][_col],
                 )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -600,7 +600,9 @@ def history_glm_first_stop_fit(
         _expand_to_block_windows(_feats, glm_window_blocks, glm_skip_blocks)
     )
     glm1_coefs_window = _fit_history_glm(
-        glm1_windows, unit_col=["subject_id", "window"], coefs=[_c for _c in _ONEHOT_CELL_STYLE if not _c.endswith("_Skip")]
+        glm1_windows,
+        unit_col=["subject_id", "window"],
+        coefs=[_c for _c in _ONEHOT_CELL_STYLE if not _c.endswith("_Skip")],
     )
     glm1_window_bounds = (
         glm1_windows.drop_duplicates("window")
@@ -618,7 +620,6 @@ def history_glm_first_stop_weights(glm1_coefs_window, glm1_window_bounds):
     with _presentation_style():
         _fig, _axes = _plot(glm1_coefs_window, glm1_window_bounds, value="weight")
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -629,7 +630,6 @@ def history_glm_first_stop_p_choice(glm1_window_bounds, glm1_windows):
     with _presentation_style():
         _fig, _axes = _plot(glm1_windows, glm1_window_bounds, value="p_choice")
     _fig
-    return
 
 
 @app.cell(hide_code=True)
@@ -642,14 +642,19 @@ def history_glm_first_stop_p_choice_minus_chance(
     from analysis.plotting_style import presentation_style as _presentation_style
 
     with _presentation_style():
-        _fig, _axes = _plot(glm1_windows, glm1_window_bounds, value="p_choice_minus_chance", chance=glm_chance)
+        _fig, _axes = _plot(
+            glm1_windows,
+            glm1_window_bounds,
+            value="p_choice_minus_chance",
+            chance=glm_chance,
+        )
     _fig
-    return
 
 
 @app.cell
 def block_identity_counts(selected_trials):
     import matplotlib.pyplot as _plt
+
     from analysis.bias import block_identity_table as _block_identity_table
     from analysis.bias import plot_block_identity_counts as _plot_block_identity_counts
     from analysis.plotting_style import presentation_style as _presentation_style
@@ -661,12 +666,13 @@ def block_identity_counts(selected_trials):
         _plot_block_identity_counts(_blocks, axes=_axes)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
 def include_degenerate_toggle(mo):
-    include_degenerate = mo.ui.switch(label="Include blocks with p_stay <= 0.1 / >= 0.9 (no degenerate-block exclusion)")
+    include_degenerate = mo.ui.switch(
+        label="Include blocks with p_stay <= 0.1 / >= 0.9 (no degenerate-block exclusion)"
+    )
     include_degenerate
     return (include_degenerate,)
 
@@ -678,6 +684,7 @@ def occurrence_vs_second_trial(
     selected_trials_all,
 ):
     import matplotlib.pyplot as _plt
+
     from analysis.bias import block_identity_second_trial_table as _second_trial_table
     from analysis.bias import plot_occurrence_vs_second_trial as _plot_occ_vs_second
     from analysis.plotting_style import categorical as _categorical
@@ -692,7 +699,6 @@ def occurrence_vs_second_trial(
         _plot_occ_vs_second(_table, colors=(_blue, _orange), axes=_axes)
         _fig.tight_layout()
     _fig
-    return
 
 
 if __name__ == "__main__":

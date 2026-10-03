@@ -100,6 +100,7 @@ def bin_controls(mo):
 @app.cell
 def within_session_performance(bin_minutes, trials_all_selected):
     import matplotlib.pyplot as plt
+
     from analysis.plotting import a_lot_of_style
     from analysis.within_session import (
         plot_within_session_performance,
@@ -116,7 +117,6 @@ def within_session_performance(bin_minutes, trials_all_selected):
     with a_lot_of_style():
         plot_within_session_performance(per_session_bin, bin_minutes=bin_minutes.value)
     plt.show()
-    return
 
 
 if __name__ == "__main__":

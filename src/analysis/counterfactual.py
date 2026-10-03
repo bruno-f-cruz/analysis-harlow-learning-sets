@@ -9,11 +9,15 @@ block is split by whether its first stop was rewarded, and for each split we
 score the decision at the *next* encounter of each odor type.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
-from analysis.features import block_window_index, blocks_first_last_tags, expand_to_block_windows
+from analysis.features import (
+    block_window_index,
+    blocks_first_last_tags,
+    expand_to_block_windows,
+)
 from analysis.plotting import (
     TWO_BY_TWO_COLORS,
     bootstrap_diff_ci,
@@ -22,7 +26,12 @@ from analysis.plotting import (
     ci_errorbar,
     plot_mean_ci_band,
 )
-from analysis.plotting_style import INK_MUTED, INK_PRIMARY, animal_palette, diverging_cmap
+from analysis.plotting_style import (
+    INK_MUTED,
+    INK_PRIMARY,
+    animal_palette,
+    diverging_cmap,
+)
 
 #: (first_stop_rewarded, next_odor_is_rewarded, short_label, ideal_p_stop)
 COUNTERFACTUAL_CELLS = [
@@ -195,7 +204,9 @@ def plot_counterfactual_p_stop_by_window(
     skip_blocks = window_blocks if skip_blocks is None else skip_blocks
 
     block_table = counterfactual_block_table(trials)
-    windows = block_window_index(trials, window_blocks=window_blocks, skip_blocks=skip_blocks)
+    windows = block_window_index(
+        trials, window_blocks=window_blocks, skip_blocks=skip_blocks
+    )
     block_table = block_table.merge(
         windows[["subject_id", "session_id", "block", "window"]],
         on=["subject_id", "session_id", "block"],
@@ -223,9 +234,13 @@ def plot_counterfactual_p_stop_by_window(
         _, ax = plt.subplots(figsize=(7, 5))
 
     subjects = sorted(per_animal["subject_id"].unique())
-    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    animal_colors = (
+        animal_colors if animal_colors is not None else animal_palette(subjects)
+    )
     reward_colors = (
-        reward_colors if reward_colors is not None else {True: "tab:orange", False: "tab:blue"}
+        reward_colors
+        if reward_colors is not None
+        else {True: "tab:orange", False: "tab:blue"}
     )
     tracked_odor_is_rewarded = not first_stop_rewarded
 
@@ -233,16 +248,24 @@ def plot_counterfactual_p_stop_by_window(
         grp = grp.sort_values("window")
         x = grp["window"].to_numpy() * skip_blocks + window_blocks
         ax.plot(
-            x, grp["p_stop"], color=animal_colors[str(subject_id)], linewidth=1, alpha=0.5
+            x,
+            grp["p_stop"],
+            color=animal_colors[str(subject_id)],
+            linewidth=1,
+            alpha=0.5,
         )
 
     rng = np.random.default_rng(0)
     stats = bootstrap_group_stats(per_animal["p_stop"], per_animal["window"], rng)
     stats.index = stats.index * skip_blocks + window_blocks
-    plot_mean_ci_band(ax, stats, color=reward_colors[tracked_odor_is_rewarded], marker="o")
+    plot_mean_ci_band(
+        ax, stats, color=reward_colors[tracked_odor_is_rewarded], marker="o"
+    )
 
     ax.set_xlabel("Block number")
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=8, steps=[1, 3, 6, 9, 10], integer=True))
+    ax.xaxis.set_major_locator(
+        MaxNLocator(nbins=8, steps=[1, 3, 6, 9, 10], integer=True)
+    )
     if subtract_chance:
         ax.axhline(0, color="gray", ls=":", lw=1)
         ax.set_ylabel("P(Stop) − chance (P(Stop) @ site 1)")
@@ -538,7 +561,14 @@ def plot_counterfactual_heatmap_by_window(
             for s in sessions
         ]
 
-        ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax, aspect="auto", interpolation="nearest")
+        ax.imshow(
+            grid,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            aspect="auto",
+            interpolation="nearest",
+        )
         ax.grid(False)
         ax.set_xticks(range(len(COUNTERFACTUAL_CELLS)))
         ax.set_xticklabels(
@@ -559,7 +589,13 @@ def plot_counterfactual_heatmap_by_window(
                     v = grid[r, c]
                     if np.isnan(v):
                         ax.text(
-                            c, r, "·", ha="center", va="center", color=INK_MUTED, fontsize=8
+                            c,
+                            r,
+                            "·",
+                            ha="center",
+                            va="center",
+                            color=INK_MUTED,
+                            fontsize=8,
                         )
                         continue
                     ax.text(
@@ -832,9 +868,7 @@ def plot_counterfactual_cohort_minus_chance(
     matrix["p_stop_minus_chance"] = matrix["p_stop"] - matrix["stopped_first_site"]
     value = "p_stop_minus_chance" if subtract_chance else "p_stop"
 
-    cohort = counterfactual_cohort_average(
-        matrix, value=value, min_animals=min_animals
-    )
+    cohort = counterfactual_cohort_average(matrix, value=value, min_animals=min_animals)
     cohort = cohort.dropna(subset=["mean"])
     cohort["x"] = cohort["session_index"] * skip_blocks + window_blocks
 
@@ -853,8 +887,15 @@ def plot_counterfactual_cohort_minus_chance(
             ]
         )
         ax.errorbar(
-            sub["x"], sub["mean"], yerr=yerr, marker="o", ms=5, lw=1.8,
-            capsize=3, color=color, label=label.replace("\n", " "),
+            sub["x"],
+            sub["mean"],
+            yerr=yerr,
+            marker="o",
+            ms=5,
+            lw=1.8,
+            capsize=3,
+            color=color,
+            label=label.replace("\n", " "),
         )
 
     if subtract_chance:
@@ -870,8 +911,16 @@ def plot_counterfactual_cohort_minus_chance(
     for x, n in n_by_x.items():
         if n != prev:
             ax.axvline(x, color="gray", lw=0.6, ls=":", alpha=0.6, zorder=0)
-            ax.text(x, 1.01, f"n={int(n)}", transform=ax.get_xaxis_transform(),
-                    ha="left", va="bottom", fontsize=8, color=INK_MUTED)
+            ax.text(
+                x,
+                1.01,
+                f"n={int(n)}",
+                transform=ax.get_xaxis_transform(),
+                ha="left",
+                va="bottom",
+                fontsize=8,
+                color=INK_MUTED,
+            )
             prev = n
     ax.set_xlabel("Number of blocks")
     ax.set_ylabel("P(Stop) − chance" if subtract_chance else "P(Stop)")
@@ -1134,7 +1183,9 @@ def plot_p_stop_hazard_by_session(
         _, ax = plt.subplots(figsize=(7, 5))
 
     subjects = sorted(per_session["subject_id"].unique())
-    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    animal_colors = (
+        animal_colors if animal_colors is not None else animal_palette(subjects)
+    )
 
     for subject_id, grp in per_session.groupby("subject_id"):
         grp = grp.sort_values("session_index")
@@ -1147,7 +1198,9 @@ def plot_p_stop_hazard_by_session(
         )
 
     rng = np.random.default_rng(0)
-    stats = bootstrap_group_stats(per_session["p_stop"], per_session["session_index"], rng)
+    stats = bootstrap_group_stats(
+        per_session["p_stop"], per_session["session_index"], rng
+    )
     stats.index = stats.index + 1
     plot_mean_ci_band(ax, stats, color=color, marker="o")
 
@@ -1190,9 +1243,9 @@ def counterfactual_p_stop_first_last_blocks(
     value_col = "stop_next_bad" if first_stop_rewarded else "stop_next_good"
     rng = rng if rng is not None else np.random.default_rng(0)
 
-    ranges = blocks_first_last_tags(trials, n_blocks=n_blocks, last_n_blocks=last_n_blocks)[
-        ["subject_id", "session_id", "block", "block_range"]
-    ].drop_duplicates()
+    ranges = blocks_first_last_tags(
+        trials, n_blocks=n_blocks, last_n_blocks=last_n_blocks
+    )[["subject_id", "session_id", "block", "block_range"]].drop_duplicates()
 
     block_table = counterfactual_block_table(trials)
     block_table = block_table.merge(
@@ -1212,7 +1265,9 @@ def counterfactual_p_stop_first_last_blocks(
     )
 
     p_stop_groups = cond.groupby(["subject_id", "block_range"])[value_col]
-    chance_groups = first_site.groupby(["subject_id", "block_range"])["stopped_first_site"]
+    chance_groups = first_site.groupby(["subject_id", "block_range"])[
+        "stopped_first_site"
+    ]
     keys = sorted(set(p_stop_groups.groups) & set(chance_groups.groups))
 
     records = []
@@ -1263,7 +1318,11 @@ def plot_counterfactual_p_stop_first_last_scatter(
     :func:`counterfactual_p_stop_first_last_blocks`), colored to match that
     point's fill.
     """
-    reward_colors = reward_colors if reward_colors is not None else {True: "tab:orange", False: "tab:blue"}
+    reward_colors = (
+        reward_colors
+        if reward_colors is not None
+        else {True: "tab:orange", False: "tab:blue"}
+    )
     last_n_blocks = n_blocks if last_n_blocks is None else last_n_blocks
 
     if ax is None:
@@ -1289,16 +1348,26 @@ def plot_counterfactual_p_stop_first_last_scatter(
         color = reward_colors[not first_stop_rewarded]
 
         ax.errorbar(
-            x, y,
-            xerr=ci_errorbar(first_stats), yerr=ci_errorbar(last_stats),
-            fmt="none", ecolor=color, elinewidth=1.2, capsize=3, alpha=0.7, zorder=2,
+            x,
+            y,
+            xerr=ci_errorbar(first_stats),
+            yerr=ci_errorbar(last_stats),
+            fmt="none",
+            ecolor=color,
+            elinewidth=1.2,
+            capsize=3,
+            alpha=0.7,
+            zorder=2,
         )
 
         subjects = x.index.tolist()
-        subject_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+        subject_colors = (
+            animal_colors if animal_colors is not None else animal_palette(subjects)
+        )
         edge_colors = [subject_colors[str(s)] for s in subjects]
         ax.scatter(
-            x, y,
+            x,
+            y,
             color=color,
             edgecolors=edge_colors,
             linewidths=1.8,

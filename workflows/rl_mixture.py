@@ -86,6 +86,8 @@ def controls(mo):
 def helpers():
     import numpy as np
     import pandas as pd
+    from harlow_rl import HarlowEnv, MixtureAgent, TaskConfig, simulate
+
     from analysis.plotting import (
         bootstrap_across_animals,
         bootstrap_mean_ci,
@@ -99,7 +101,6 @@ def helpers():
         new_figure,
         presentation_style,
     )
-    from harlow_rl import HarlowEnv, MixtureAgent, TaskConfig, simulate
 
     rng = np.random.default_rng(0)
 
@@ -234,7 +235,6 @@ def choice_by_training(
         _ax.legend(loc="center right")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -285,7 +285,6 @@ def choice_by_past_trial(
         _ax.legend(loc="center right", fontsize=11)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -308,7 +307,7 @@ def choice_by_odor_appearance_first_stop_rewarded(
     presentation_style,
     sim_trials,
 ):
-    _cond = sim_trials[sim_trials["first_stop_rewarded"] == True]  # noqa: E712
+    _cond = sim_trials[sim_trials["first_stop_rewarded"] == True]
     _blue, _orange = categorical(2)
     with presentation_style():
         _fig, _ax = new_figure("standard")
@@ -321,7 +320,6 @@ def choice_by_odor_appearance_first_stop_rewarded(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -332,7 +330,7 @@ def choice_by_odor_appearance_first_stop_nonrewarded(
     presentation_style,
     sim_trials,
 ):
-    _cond = sim_trials[sim_trials["first_stop_rewarded"] == False]  # noqa: E712
+    _cond = sim_trials[sim_trials["first_stop_rewarded"] == False]
     _blue, _orange = categorical(2)
     with presentation_style():
         _fig, _ax = new_figure("standard")
@@ -345,7 +343,6 @@ def choice_by_odor_appearance_first_stop_nonrewarded(
         )
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -383,7 +380,6 @@ def bias_by_position_nonrewarded(
         _ax.legend(loc="upper right", fontsize=11)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -421,7 +417,6 @@ def bias_by_position_rewarded(
         _ax.legend(loc="lower right", fontsize=11)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -487,7 +482,6 @@ def plot_sweep_bias(
         _ax.set_ylabel("Bias: paid last time - did not")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -520,7 +514,6 @@ def plot_sweep_past(
         _ax.legend(loc="center left", fontsize=10)
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -535,7 +528,6 @@ def plot_sweep_rate(
         _ax.set_ylabel("Reward rate (per s)")
         _fig.tight_layout()
     _fig
-    return
 
 
 @app.cell
@@ -572,7 +564,6 @@ def sensory_values(
         _ax.set_ylabel("Sensory Q(stay) - Q(leave)")
         _fig.tight_layout()
     _fig
-    return
 
 
 if __name__ == "__main__":

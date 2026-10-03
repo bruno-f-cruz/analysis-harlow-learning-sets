@@ -58,17 +58,18 @@ def imports_pathlib():
 
 @app.cell
 def imports_provenance():
+    import os
+    from datetime import datetime, timezone
+
     from analysis.artifacts import artifact_store_for_uri
     from analysis.run import (
-        generate_run_id,
         build_manifest,
+        generate_run_id,
         git_commit,
         git_is_dirty,
         host_info,
     )
-    from analysis.sessions import load_attached_datasets, build_inputs
-    from datetime import datetime, timezone
-    import os
+    from analysis.sessions import build_inputs, load_attached_datasets
 
     return (
         artifact_store_for_uri,
@@ -90,6 +91,7 @@ def run_setup(artifact_store_for_uri, datetime, generate_run_id, os, timezone):
     import logging
     import sys
     from pathlib import Path as _Path
+
     from analysis.logger import log as _log
 
     # Named `run_setup` rather than `setup` -- marimo reserves the literal cell
@@ -167,13 +169,13 @@ def session_viewer(mo, session_ids, uri):
 @app.cell
 def _(df):
     print(df["curriculum_stage_name"].unique())
-    return
 
 
 @app.cell
 def load_and_prepare_trials(df, sites):
-    import pandas as pd
     import numpy as np
+    import pandas as pd
+
     from analysis.features import prepare_trials
     from analysis.logger import log as _log
 
@@ -190,6 +192,8 @@ def curriculum_stage_datasets(df, mo, trials):
     from analysis.dataset_selection import (
         DATASET_OPTIONS,
         curriculum_stage_session_ids,
+    )
+    from analysis.dataset_selection import (
         select_trials_by_session as _select_trials_by_session,
     )
 
@@ -268,7 +272,6 @@ def sql_over_trials(mo, trials_all):
             ),
         ]
     )
-    return
 
 
 @app.cell
@@ -295,7 +298,6 @@ def choice_by_block_position_per_session(a_lot_of_style, plt, trials_selected):
         plot_choice_by_block_position_per_session(trials_selected)
 
     plt.show()
-    return
 
 
 @app.cell
@@ -306,7 +308,6 @@ def choice_by_first_stop(a_lot_of_style, plt, trials_selected):
         plot_choice_by_block_position_by_first_stop(trials_selected)
 
     plt.show()
-    return
 
 
 @app.cell
@@ -317,7 +318,6 @@ def choice_by_first_stop_overlay(a_lot_of_style, plt, trials_selected):
         plot_choice_by_block_position_by_first_stop_overlay(trials_selected)
 
     plt.show()
-    return
 
 
 @app.cell
@@ -328,7 +328,6 @@ def naive_p_stop_first_last(a_lot_of_style, plt, trials_selected):
         plot_naive_p_stop_first_last(trials_selected, n_blocks=200)
 
     plt.show()
-    return
 
 
 @app.cell
@@ -401,7 +400,6 @@ def choice_at_first_stops_across_sessions(
         )
         _fig.tight_layout()
     plt.show()  # Use session dates from 1st stop for x-axis labels (most sessions should have it)
-    return
 
 
 @app.cell
@@ -464,7 +462,6 @@ def history_glm_reward_cells_by_window(
             coefs_window, window_bounds, window_blocks.value
         )
     plt.show()
-    return
 
 
 @app.cell
@@ -475,7 +472,6 @@ def bias_by_odor_identity(a_lot_of_style, plt, trials_selected):
     with a_lot_of_style():
         plot_bias_by_odor_identity(pairs_df)
     plt.show()
-    return
 
 
 @app.cell(hide_code=True)
@@ -505,7 +501,6 @@ def md_counterfactual(mo):
     > Uses `trials_all` (pre `p_stay ∈ {0,1}` filter) — dropping `p_stay == 1` blocks would remove
     > exactly the "stopped at everything" blocks, i.e. the clearest failures of discrimination.
     """)
-    return
 
 
 @app.cell
@@ -530,7 +525,6 @@ def counterfactual_matrix(trials_all_selected):
         .round(3)
         .to_string()
     )
-    return
 
 
 @app.cell
@@ -703,7 +697,6 @@ def counterfactual_cohort_by_window_with_chance(
             )
         _axes[-1].legend(frameon=False, fontsize=7, loc="best")
     plt.show()
-    return
 
 
 @app.cell
@@ -743,7 +736,6 @@ def counterfactual_cohort_by_window_excl_864845(
             title=f"Exclude animal 864845 — counterfactual learning averaged across mice at the same {window_blocks.value}-block window\n(faint = individual animals; bold line + shaded band = cohort mean & 95% CI)",
         )
     plt.show()
-    return
 
 
 @app.cell
@@ -768,7 +760,6 @@ def counterfactual_trends_per_animal(
             cf_window, window_blocks.value, skip_blocks.value
         )
     plt.show()
-    return
 
 
 @app.cell
@@ -789,7 +780,6 @@ def counterfactual_heatmap_per_animal(
             row_label_fn=lambda s: s.rsplit("_w", 1)[1],
         )
     plt.show()
-    return
 
 
 @app.cell
@@ -824,7 +814,6 @@ def finalize(
 
     artifact_store.write_json("manifest.json", manifest)
     _log.info("complete — run_id=%s", run_id)
-    return
 
 
 if __name__ == "__main__":

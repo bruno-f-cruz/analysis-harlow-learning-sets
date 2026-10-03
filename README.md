@@ -47,8 +47,8 @@ Loading fails if any listed session is missing from the dataset.
 from analysis.sessions import Dataset
 
 dataset = Dataset.from_manifests("data_assets.json", "raw_sessions.json")
-dataset.session   # one row per session
-dataset.sites     # one row per site (trial)
+dataset.session  # one row per session
+dataset.sites  # one row per site (trial)
 
 # Per-animal tables, loaded on demand:
 dataset.load_licks("841312")

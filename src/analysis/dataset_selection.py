@@ -32,7 +32,9 @@ def curriculum_stage_session_ids(sessions: pd.DataFrame) -> dict[str, pd.Series]
     }
 
 
-def select_trials_by_session(trials: pd.DataFrame, session_ids: pd.Series) -> pd.DataFrame:
+def select_trials_by_session(
+    trials: pd.DataFrame, session_ids: pd.Series
+) -> pd.DataFrame:
     """Rows of `trials` whose `session_id` is in `session_ids`."""
     return trials[trials["session_id"].isin(session_ids)]
 

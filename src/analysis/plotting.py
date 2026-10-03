@@ -9,9 +9,9 @@ see :mod:`analysis.glm`, :mod:`analysis.bias`, :mod:`analysis.counterfactual`.
 
 from contextlib import contextmanager
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from analysis.features import (
     appearance_table,
@@ -163,11 +163,20 @@ def plot_mean_ci_band(
     and stays legible however the deck's background ends up colored.
     """
     ax.plot(
-        stats.index, stats["mean"], color=color, label=label, marker=marker,
+        stats.index,
+        stats["mean"],
+        color=color,
+        label=label,
+        marker=marker,
         linestyle=linestyle,
     )
     ax.fill_between(
-        stats.index, stats["ci_lo"], stats["ci_hi"], color=color, alpha=alpha, linewidth=0
+        stats.index,
+        stats["ci_lo"],
+        stats["ci_hi"],
+        color=color,
+        alpha=alpha,
+        linewidth=0,
     )
 
 
@@ -420,7 +429,9 @@ def plot_choice_by_odor_appearance_by_animal(
     repeating it on every tiny subplot; with no leftover axis, no legend is
     drawn.
     """
-    rs = _first_last_blocks_table(trials, n_blocks=n_blocks, from_first_stop=from_first_stop)
+    rs = _first_last_blocks_table(
+        trials, n_blocks=n_blocks, from_first_stop=from_first_stop
+    )
     colors = colors if colors is not None else {True: "tab:orange", False: "tab:blue"}
     rng = np.random.default_rng(0)
     subject_ids = sorted(rs["subject_id"].unique())
@@ -514,7 +525,7 @@ def plot_choice_by_block_position_raw(
         "Position from first stop" if from_first_stop else "Position within block"
     )
     ax.set_ylabel("P(Choice)")
-    ax.set_xticks(range(0, int(rs["appearance"].max()) + 1))
+    ax.set_xticks(range(int(rs["appearance"].max()) + 1))
     ax.set_ylim(-0.1, 1.1)
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
     if legend:
@@ -583,7 +594,12 @@ def plot_paired_appearance(
             color = colors.get(str(subject_id), "gray")
             ax.plot([x0, x1], [row[pos_a], row[pos_b]], color=color, marker="o")
         ax.axvspan(
-            x0 - 0.3, x1 + 0.3, ymin=0.97, ymax=1.0, color=group_colors[is_rewarded], linewidth=0
+            x0 - 0.3,
+            x1 + 0.3,
+            ymin=0.97,
+            ymax=1.0,
+            color=group_colors[is_rewarded],
+            linewidth=0,
         )
         xticks += [x0, x1]
         xticklabels += [f"Pos {pos_a}", f"Pos {pos_b}"]
@@ -710,7 +726,7 @@ def plot_choice_by_block_position_raw_by_tercile(
             label = "Rewarded odor" if is_rewarded else "Non-rewarded odor"
             plot_mean_ci_band(ax, stats, color=colors[bool(is_rewarded)], label=label)
         ax.set_xlabel(f"{tercile.capitalize()} tercile")
-        ax.set_xticks(range(0, xmax + 1))
+        ax.set_xticks(range(xmax + 1))
         ax.set_ylim(-0.1, 1.1)
         ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
         if i == 0:

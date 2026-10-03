@@ -15,9 +15,9 @@ Odor identity at the next block's first site is deliberately not split on --
 the animal cannot know yet which odor is rewarded.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from analysis.features import block_window_index
 from analysis.plotting import bootstrap_across_animals, plot_mean_ci_band
@@ -144,22 +144,34 @@ def plot_first_site_p_stop_by_transition(
     rng = np.random.default_rng(0)
     stats = bootstrap_across_animals(long, "next_first_stopped", ["condition"], rng)
     baseline = bootstrap_across_animals(
-        table.assign(all=0, v=table["next_first_stopped"].astype(float)), "v", ["all"], rng
+        table.assign(all=0, v=table["next_first_stopped"].astype(float)),
+        "v",
+        ["all"],
+        rng,
     )
-    ax.axhline(baseline["mean"].iloc[0], color=INK_MUTED, ls=":", lw=1, label="All transitions")
+    ax.axhline(
+        baseline["mean"].iloc[0], color=INK_MUTED, ls=":", lw=1, label="All transitions"
+    )
 
     per_animal = (
         long.groupby(["subject_id", "condition"])["next_first_stopped"].mean().unstack()
     )
     subjects = [str(s) for s in per_animal.index]
-    animal_colors = animal_colors if animal_colors is not None else animal_palette(subjects)
+    animal_colors = (
+        animal_colors if animal_colors is not None else animal_palette(subjects)
+    )
     for subject_id, row in per_animal.iterrows():
         for split in _SPLIT_LABELS:
             split_keys = [c[0] for c in TRANSITION_CONDITIONS if c[3] == split]
             vals = row.reindex(split_keys)
             ax.plot(
-                [xpos[k] for k in split_keys], vals.to_numpy(),
-                color=animal_colors[str(subject_id)], lw=1, alpha=0.6, marker="o", ms=4,
+                [xpos[k] for k in split_keys],
+                vals.to_numpy(),
+                color=animal_colors[str(subject_id)],
+                lw=1,
+                alpha=0.6,
+                marker="o",
+                ms=4,
             )
 
     half = 0.3
@@ -168,15 +180,24 @@ def plot_first_site_p_stop_by_transition(
             continue
         mean, lo, hi = stats.loc[key, ["mean", "ci_lo", "ci_hi"]]
         x = xpos[key]
-        ax.fill_between([x - half, x + half], lo, hi, color=color, alpha=0.35, linewidth=0)
+        ax.fill_between(
+            [x - half, x + half], lo, hi, color=color, alpha=0.35, linewidth=0
+        )
         ax.plot([x - half, x + half], [mean, mean], color=color, lw=3)
 
     ax.set_xticks([xpos[k] for k in keys])
     ax.set_xticklabels([_TICK_LABELS[k] for k in keys])
     for split, label in _SPLIT_LABELS.items():
         split_x = [xpos[c[0]] for c in TRANSITION_CONDITIONS if c[3] == split]
-        ax.text(np.mean(split_x), 1.08, label, ha="center", va="bottom", color=INK_MUTED,
-                transform=ax.get_xaxis_transform())
+        ax.text(
+            np.mean(split_x),
+            1.08,
+            label,
+            ha="center",
+            va="bottom",
+            color=INK_MUTED,
+            transform=ax.get_xaxis_transform(),
+        )
     ax.set_xlim(-0.6, 5.1)
     _set_p_stop_axis(ax)
     ax.legend(loc="lower right")
@@ -220,14 +241,25 @@ def plot_first_site_p_stop_by_transition_window(
         _, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
     rng = np.random.default_rng(0)
-    stats = bootstrap_across_animals(long, "next_first_stopped", ["condition", "x"], rng)
+    stats = bootstrap_across_animals(
+        long, "next_first_stopped", ["condition", "x"], rng
+    )
     for ax, (split, split_label) in zip(axes, _SPLIT_LABELS.items()):
         for key, label, color, cond_split in TRANSITION_CONDITIONS:
-            if cond_split != split or key not in stats.index.get_level_values("condition"):
+            if cond_split != split or key not in stats.index.get_level_values(
+                "condition"
+            ):
                 continue
             plot_mean_ci_band(ax, stats.loc[key], color, label=label, marker="o")
-        ax.text(0.5, 1.0, split_label, transform=ax.transAxes, ha="center", va="bottom",
-                color=INK_MUTED)
+        ax.text(
+            0.5,
+            1.0,
+            split_label,
+            transform=ax.transAxes,
+            ha="center",
+            va="bottom",
+            color=INK_MUTED,
+        )
         ax.set_xlabel(f"Block number (window {window_blocks}, stride {skip_blocks})")
         ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True))
         _set_p_stop_axis(ax)
