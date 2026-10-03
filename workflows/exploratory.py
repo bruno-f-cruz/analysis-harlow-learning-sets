@@ -1169,5 +1169,47 @@ def first_vs_later_stop_plot(
     return
 
 
+@app.cell
+def block_transition_first_site(selected_trials, selected_trials_all):
+    import matplotlib.pyplot as _plt
+    from analysis.block_transitions import (
+        plot_first_site_p_stop_by_transition as _plot_first_site_p_stop_by_transition,
+    )
+    from analysis.plotting_style import presentation_style as _presentation_style
+
+    # P(Stop) at the first site of block b, split by how block b-1 ended. Left:
+    # every transition; right: only transitions where neither block is degenerate.
+    with _presentation_style():
+        _fig, _axes = _plt.subplots(1, 2, figsize=(16, 5.5), sharey=True)
+        for _ax, (_trials, _label) in zip(
+            _axes,
+            [(selected_trials_all, "All blocks"), (selected_trials, "Excluding degenerate blocks")],
+        ):
+            _plot_first_site_p_stop_by_transition(_trials, ax=_ax)
+            _ax.text(0.02, 0.02, _label, transform=_ax.transAxes, ha="left", va="bottom")
+        _axes[1].set_ylabel("")
+        _fig.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def block_transition_first_site_by_window(selected_trials):
+    import matplotlib.pyplot as _plt
+    from analysis.block_transitions import (
+        plot_first_site_p_stop_by_transition_window as _plot_by_window,
+    )
+    from analysis.plotting_style import presentation_style as _presentation_style
+
+    # Same split over training, degenerate blocks excluded; windows match the
+    # history-GLM cells (100 blocks, stride 20), assigned by the next block.
+    with _presentation_style():
+        _fig, _axes = _plt.subplots(1, 2, figsize=(16, 5.5), sharey=True)
+        _plot_by_window(selected_trials, window_blocks=100, skip_blocks=20, axes=_axes)
+        _fig.tight_layout()
+    _fig
+    return
+
+
 if __name__ == "__main__":
     app.run()
